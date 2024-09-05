@@ -90,10 +90,10 @@ else:
 
 # Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-rho_1 = 0 # [m]  - radial separation 
-rho_3 =0 # [m]  - cross-track separation
-alpha = 180 * deg2rad  # [rad] - angle between the radial and along-track separation
-beta = 90 * deg2rad # [rad] - angle between the radial and cross-track separation
+rho_1 = 0.5 # [m]  - radial separation 
+rho_3 =1 # [m]  - cross-track separation
+alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
+beta = 0#90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0 #-10 # Drift per revolutions m/resolution
 
 rho_2 = 20 # [m]  - along-track separation
@@ -106,8 +106,8 @@ RNOE_0=Param2NROE(NOE_chief, parameters,data)
 RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2]) 
 
 # angle of attack for the deputy spacecraft
-yaw_1 = 0 
-yaw_2 = 0 
+yaw_1 = 0  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_2 = 0  # [rad] - angle of attack = 0
 yaw_c_d=numpy.array([yaw_1,yaw_2])
 
 print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)

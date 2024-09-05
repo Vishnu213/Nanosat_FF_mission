@@ -366,7 +366,7 @@ def Event_COE(t,yy,param):
 
 
 def guess_nonsingular(t,yy,param):
-    # Guass planetary equations
+    # Guass planetary equations in near non singular form
     # Input, 
     # t - time
     # x0 - state vector
@@ -802,14 +802,8 @@ def absolute_NSROE_dynamics(t,yy,param):
 
 
 def Cart2RO(RO,OE_1):
-    # Guass planetary equations
-    # Input, 
-    # t - time
-    # x0 - state vector
-    # param is a tuple 3 x 1
-    # param[0] - COE vector - [angular momentum, eccentricity, inclination, RAAN, argument of perigee, true anomaly]
-    # param[1] - J2 constant value
-    # param[0] - list of information related to Earth [mu, radius]
+    # Not tested yet
+    # Convert from Cartesian to Orbital Elements
 
     # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
     data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
@@ -862,6 +856,7 @@ def Cart2RO(RO,OE_1):
 
 def Param2NROE(NOE, parameters,data):
 
+    # Convert from design parameters to relative orbital elements
     # Taken from  C.traub paper 
     # NOE=numpy.array([a,lambda_0,i,q1,q2,omega]) unpack this
     a, lambda_, i, q1, q2, omega = NOE
@@ -905,7 +900,8 @@ def Param2NROE(NOE, parameters,data):
 # Convert from NSROE to Cartesian
 
 def NSROE2Cart(NSROE,NSROE0,x_vec_init,data):
-    
+    # Extra this function is not tested yet
+    # conversion from from relative orbital elements to LVLH frame
     a, lambda_, i, q1, q2, omega =NSROE 
     a0, lambda_0, i0, q1_0, q2_0, omega_0 =NSROE0
     x_0, y_0, z_0, x_dot_0, y_dot_0, z_dot_0 = x_vec_init
@@ -1009,6 +1005,8 @@ def NSROE2Cart(NSROE,NSROE0,x_vec_init,data):
 
 def NSROE2LVLH(NSROE,NSOE0,data):
 
+    # conversion from from relative orbital elements to LVLH frame
+
     # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
     data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
     mu=data["Primary"][0]
@@ -1086,3 +1084,55 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     z_p = (e3 / p) * numpy.sin(u + beta_0)
 
     return numpy.array([x_p, y_p, z_p])
+
+
+def calculate_flight_path_angle(r_vec, v_vec):
+    """
+    Calculate the flight path angle (gamma) in radians.
+    
+    Parameters:
+        r_vec: Position vector (3D) in m.
+        v_vec: Velocity vector (3D) in m/s.
+    
+    Returns:
+        gamma: Flight path angle in radians.
+    """
+    # Compute the magnitudes of the position and velocity vectors
+    r = numpy.linalg.norm(r_vec)
+    v = numpy.linalg.norm(v_vec)
+    
+    # Compute the dot product of r_vec and v_vec
+    r_dot_v = numpy.dot(r_vec, v_vec)
+    
+    # Compute the cosine of the flight path angle
+    cos_gamma = r_dot_v / (r * v)
+    
+    # Compute the flight path angle gamma (in radians)
+    gamma = numpy.arccos(cos_gamma)
+    
+    return gamma
+
+
+def frenet_to_lvlh(F_T, F_N, F_B, gamma):
+    """
+    Transform forces from the Frenet frame to the LVLH frame.
+    
+    Parameters:
+        F_T: Tangential component of the force in the Frenet frame.
+        F_N: Normal component of the force in the Frenet frame.
+        F_B: Binormal component of the force in the Frenet frame.
+        gamma: Flight path angle (radians).
+    
+    Returns:
+        F_R: Radial component of the force in the LVLH frame.
+        F_T: Tangential component of the force in the LVLH frame.
+        F_N: Normal component of the force in the LVLH frame.
+    """
+    # Apply the transformation matrix
+    F_R_lvlh = F_T * numpy.sin(gamma) + F_B * numpy.cos(gamma)
+    F_T_lvlh = F_T * numpy.cos(gamma) - F_B * numpy.sin(gamma)
+    F_N_lvlh = F_N  # Normal force remains the same
+    
+    return F_R_lvlh, F_T_lvlh, F_N_lvlh
+
+
