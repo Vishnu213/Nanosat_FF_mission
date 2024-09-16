@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import math
+from pyatmos import expo
 
 from Transformations import PQW2ECI,RSW2ECI
 from Perturbations import aspherical_perturbation,atmosphheric_drag
@@ -93,6 +94,8 @@ def kep2car(COE,mu):
     OM = COE[3]
     om =COE[4]
     TA =COE[5]
+    
+
     
     # obtaining position and velocity vector in perifocan reference frame
     rp = ( h ** 2 / mu ) * ( 1 / ( 1 + e * numpy.cos( TA ) ) ) * ( numpy.cos( TA ) * numpy.array([ 1 , 0 ,0 ])
@@ -468,7 +471,7 @@ def guess_nonsingular(t,yy,param):
     
     return y_dot
 
-def guess_nonsingular_Bmat(t,yy,param):
+def guess_nonsingular_Bmat(t,yy,param,yaw):
    # Guass planetary equations
     # Input, 
     # t - time
@@ -504,6 +507,7 @@ def guess_nonsingular_Bmat(t,yy,param):
     if e==0:  
         u = l
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+        rr,vv=kep2car(numpy.array([h,e,i,0,OM,u]),mu)
     else:
         omega_peri = numpy.arccos(q1 / e)
         mean_anamoly = l - omega_peri
@@ -511,8 +515,9 @@ def guess_nonsingular_Bmat(t,yy,param):
         theta = theta_tuple[0]
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+        rr,vv=kep2car(numpy.array([h,e,i,omega_peri,OM,u]),mu) # check if this is the correct way to do it??
 
-    # rr,vv=kep2car(numpy.array([h,yy[1],yy[2],yy[3],yy[4],yy[5]]),mu)
+
     # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
     data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
 
@@ -532,6 +537,43 @@ def guess_nonsingular_Bmat(t,yy,param):
     # t_h = vv / numpy.linalg.norm( vv )                                          # velocity versoe
     # h_h = numpy.cross( rr, vv ) / numpy.linalg.norm(numpy.cross(rr, vv ) )           # angular momentum veror
     # n_h = numpy.cross( h_h, t_h ) 
+
+    # Use a simple atmospheric model for density - needs to be substituted with a proper model later
+    hc= numpy.abs(data["Primary"][1] - r)
+
+    hd = numpy.abs(data["Primary"][1] - r)
+
+    rho_val = expo(h,'geopotential') # geopotential altitudes
+
+    rho = rho_val.rho[0]
+    # Reference area - function of angle of attack - look up table
+    A_cross = 0.25
+
+    # Drag coefficient - function of angle of attack - look up table - simpified model
+    C_D = 0.9
+
+    # Drag Ballistic coefficient - function of angle of attack - look up table - simplified model
+    B_D = A_cross * C_D/data["S/C"][0]
+
+    # Lift coefficient - function of angle of attack - look up table - simplified model
+    C_L = 0.1
+
+    # Lift Ballistic coefficient - function of angle of attack - look up table - simplified model
+    B_L = A_cross * C_L/data["S/C"][0]
+
+    # Taking into account the Earth rotation
+    v_rel = vv - numpy.cross([0,0,data["Primary"][2]],rr)
+    v_rel_hat = v_rel/numpy.linalg.norm(v_rel)
+    # Drag acceleration
+    a_drag = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_D
+
+    # Lift acceleration
+    a_lift = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_L
+
+
+
+    
+
 
 
 
@@ -782,7 +824,7 @@ def Dynamics(t,yy,param):
     y_dot_chief=absolute_NSROE_dynamics(t,yy[6:12],param)
     
     A=Lagrange_deri(t,yy[6:12],param)
-    B=guess_nonsingular_Bmat(t,yy[6:12],param)
+    B=guess_nonsingular_Bmat(t,yy[6:12],param,yy[12:14])
     
     y_dot_yaw=yaw_dynamics(t,yy[12:14],param)
     
@@ -795,7 +837,7 @@ def Dynamics(t,yy,param):
 def absolute_NSROE_dynamics(t,yy,param):
     
     A=lagrage_J2_diff(t,yy,param)
-    B=guess_nonsingular_Bmat(t,yy,param)
+    B=guess_nonsingular_Bmat(t,yy,param,yy[12:14])
     y_dot=A+numpy.matmul(B,numpy.array([0,0,0]))
 
     return y_dot

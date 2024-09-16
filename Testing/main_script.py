@@ -6,7 +6,7 @@ A planning tool for optimal three-dimensional formation flight maneuvers of sate
 Traub, C., Fasoulas, S., and Herdrich, G. (2022). 
 
 Author:
-    Vishnuvardhan Shakthibala
+    Vishnuvardhan Shakthibala 
     
 """
 ## Copy the following lines of code 
@@ -114,9 +114,6 @@ print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
 print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
  
-
-
-
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
 # [6x1,6x1,2x1]
 yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
@@ -140,9 +137,6 @@ sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
 
 
 # Convert from NROE to Carterian co-ordinates. 
-
-
-
 rr_s=numpy.zeros((3,len(sol.y[0])))
 vv_s=numpy.zeros((3,len(sol.y[0])))
 
@@ -216,7 +210,6 @@ ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
 
-
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
@@ -243,7 +236,7 @@ axs[1].set_title('mean true latitude')
 
 axs[2].plot(teval, sol.y[2])
 axs[2].set_title('inclination')
-
+ 
 
 fig, axs = plt.subplots(3, 1)
 
