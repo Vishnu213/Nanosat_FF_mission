@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 from pyatmos import expo
 from scipy.special import erf
+from CL_CD_SUTTON import  calculate_cd_cl
 
 ## calculate lift and drag forces on a spacecraft
 
@@ -56,7 +57,7 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, C_D, C_L, area_
 # Generic function to compute aerodynamic forces for a spacecraft entity
 def compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv, rr, h):
     # Relative velocity of the spacecraft
-    v_rel = vv - np.cross([0, 0, entity_data["Primary"][2]], rr)
+    v_rel = vv - np.cross([0, 0, entity_data["Primary"][2]], rr) # absoluate velocity - Earth rotation factor
     
     # Density value at the spacecraft's altitude
     rho_val =expo(h, 'geopotential')

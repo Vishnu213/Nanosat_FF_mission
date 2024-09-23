@@ -813,8 +813,10 @@ def yaw_dynamics(t,yy,param):
 
     y_dot=numpy.zeros((2,))
 
-    y_dot[0]=-Izc*yy[0]
-    y_dot[1]=-Izd*yy[1]
+    u=numpy.zeros((2,1))
+
+    y_dot[0]=-Izc*u[0] 
+    y_dot[1]=-Izd*u[1]
 
     return y_dot
 

@@ -1,3 +1,13 @@
+"""
+Nanosat Formation Flying Project
+
+Modified Sentman's equation for CL and CD 
+
+Author:
+    Vishnuvardhan Shakthibala
+    
+"""
+
 import numpy as np
 import json
 from scipy.optimize import curve_fit

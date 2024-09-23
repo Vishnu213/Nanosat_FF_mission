@@ -1,37 +1,41 @@
+"""
+Nanosat Formation Flying Project
+
+Modified Sentman's equation for CL and CD 
+
+Author:
+    Vishnuvardhan Shakthibala
+    
+"""
 import numpy as np
 import pickle
 import json
 import matplotlib.pyplot as plt
 
-###
-# Script to generate lookup table for projected areas of surfaces at different angles of attack
-
-
-
-# Define the rotation matrix around the y-axis for the angle of attack
-def rotation_matrix_y(alpha):
+# Define the rotation matrix around the z-axis for the angle of attack (yaw motion)
+def rotation_matrix_z(alpha):
     cos_alpha = np.cos(alpha)
     sin_alpha = np.sin(alpha)
-    return np.array([[cos_alpha, 0, sin_alpha],
-                     [0, 1, 0],
-                     [-sin_alpha, 0, cos_alpha]])
+    return np.array([[cos_alpha, -sin_alpha, 0],
+                     [sin_alpha, cos_alpha, 0],
+                     [0, 0, 1]])
 
 # Surface normals in the body frame
 surface_normals = {
-    'front': np.array([1, 0, 0]),
-    'back': np.array([-1, 0, 0]),
-    'top': np.array([0, 1, 0]),
-    'bottom': np.array([0, -1, 0]),
-    'left': np.array([0, 0, 1]),
-    'right': np.array([0, 0, -1])
+    'front': np.array([1, 0, 0]),    # Along x-axis
+    'back': np.array([-1, 0, 0]),    # Opposite x-axis
+    'top': np.array([0, 1, 0]),      # Along y-axis
+    'bottom': np.array([0, -1, 0]),  # Opposite y-axis
+    'left': np.array([0, 0, 1]),     # Along z-axis
+    'right': np.array([0, 0, -1])    # Opposite z-axis
 }
 
-# Function to calculate transformed normals based on angle of attack
+# Function to calculate transformed normals based on angle of attack (rotation around z-axis)
 def transformed_normals(surface_normals, alpha):
-    R_y = rotation_matrix_y(alpha)
+    R_z = rotation_matrix_z(alpha)
     transformed = {}
     for key, normal in surface_normals.items():
-        transformed[key] = np.dot(R_y, normal)
+        transformed[key] = np.dot(R_z, normal)
     return transformed
 
 # Function to determine which surfaces are facing the velocity direction and calculate projected areas
@@ -57,7 +61,7 @@ def generate_lookup_table(min_angle, max_angle, step_size):
     
     return lookup_table
 
-# Updated fitting function to access integer keys directly
+# Function to fit polynomials to the lookup table data
 def fit_polynomials(lookup_table):
     angles = np.array(list(lookup_table.keys()), dtype=float)
     
@@ -150,17 +154,17 @@ if __name__ == "__main__":
     serializable_lookup_table = convert_to_serializable(lookup_table)
     
     # Save the serializable lookup table to a JSON file
-    with open('../helper_files/lookup_table.json', 'w') as f:
+    with open('../helper_files/lookup_table_projected_area.json', 'w') as f:
         json.dump(serializable_lookup_table, f, indent=4)
     
     # Fit polynomials to the lookup table
     poly_coeffs = fit_polynomials(lookup_table)
     
     # Save the polynomial functions to a file
-    save_polynomials(poly_coeffs, '../helper_files/polynomials.pkl')
+    save_polynomials(poly_coeffs, '../helper_files/polynomials_projected_area.pkl')
     
     # Later, you can load the polynomial functions from the file
-    loaded_polynomials = load_polynomials('../helper_files/polynomials.pkl')
+    loaded_polynomials = load_polynomials('../helper_files/polynomials_projected_area.pkl')
     
     # Test the lookup for an angle of attack (in degrees, e.g., 10 degrees)
     test_angle = 10

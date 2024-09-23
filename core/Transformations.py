@@ -98,6 +98,10 @@ def Frenetframe(rr,vv):
     Rot_FrenetFrame = numpy.vstack([T_unit, N_unit, W_unit])
     return Rot_FrenetFrame
 
+def Frenet2LVLH(RR_Frenet,RR_LVLH):
+    Rot_F2LVLH = numpy.matmul(RR_LVLH,numpy.linalg.inv(RR_Frenet).transpose())
+    return Rot_F2LVLH
+
 # BODY FIXED FRAME
 
 
