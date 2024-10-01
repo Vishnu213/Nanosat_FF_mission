@@ -38,7 +38,7 @@ deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital  elements/ LVLH initial conditions
 # NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6803.1366,0,90*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
+NOE_chief = numpy.array([6800.1366,0,90*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
 ## MAKE SURE TO FOLLOW RIGHT orbital elements order
 
 
@@ -66,7 +66,7 @@ yy_o=NOE_chief
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
 n_revol_T = 24*60*60/Torb
-n_revolution=100 #n_revol_T
+n_revolution=100#n_revol_T
 T_total=n_revolution*Torb
 
 t_span=[0,T_total]
@@ -87,9 +87,15 @@ vv_s=numpy.zeros((3,len(sol.y[0])))
 for i in range(0,len(sol.y[0])):
     # if sol.y[5][i]>2*numpy.pi:
     #     sol.y[5][i]= 
- 
+    if sol.y[1][i]>2000:
+        print("lambda",sol.y[1][i])
     rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
                                                sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
+    print(rr_s[:,i],vv_s[:,i])
+    print(sol.y[0][i],sol.y[1][i],sol.y[2][i], sol.y[3][i],sol.y[4][i],sol.y[5][i])
+
+
+
 
     # h = COE[0]
     # e =COE[1]

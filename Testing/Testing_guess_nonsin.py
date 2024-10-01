@@ -25,7 +25,7 @@ sys.path.insert(0, Library)
 from TwoBP import car2kep, kep2car, twobp_cart, gauss_eqn, Event_COE, theta2M, guess_nonsingular, M2theta
 
 
-r=numpy.array([-6045,-3490,2500])
+r=numpy.array([-5700,-3300,2500])
 v=numpy.array([-3.457,6.618,2.533])
 mu=398600 # gravitational parameter
 # test of RVtoOE
@@ -51,9 +51,7 @@ h0 = numpy.sqrt(mu*CEO_0[0]*(1-CEO_0[1]**2))  # [km]    Angular momentum axis of
 
 
 
-Torb = 2*numpy.pi*numpy.sqrt(CEO_0[0]**3/mu)    # [s]    Orbital period
-n_revolution=10
-T_total=n_revolution*Torb
+
 
 a = CEO_0[0]
 M=theta2M(CEO_0[5],CEO_0[1])
@@ -62,6 +60,10 @@ i = CEO_0[2]
 q1 = CEO_0[1]*numpy.sin(CEO_0[4])
 q2 = CEO_0[1]*numpy.cos(CEO_0[4])
 OM = CEO_0[3]
+
+Torb = 2*numpy.pi*numpy.sqrt(CEO_0[0]**3/mu)    # [s]    Orbital period
+n_revolution=10
+T_total=n_revolution*Torb
 
 yy_o=numpy.array([a,l,i,q1,q2,OM])
 # test for gauess equation
@@ -96,6 +98,7 @@ for i in range(0,len(sol.y[0])):
     if sol.y[5][i]>2*numpy.pi:
         sol.y[5][i]=sol.y[5][i]-2*numpy.pi     
     rr_s[:,i],vv_s[:,i]=kep2car(numpy.array([h,e,i,sol.y[5][i],omega_peri,theta]),mu)
+    print(vv_s[:,i])
 
     # h = COE[0]
     # e =COE[1]

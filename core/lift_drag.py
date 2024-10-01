@@ -2,9 +2,29 @@ import numpy as np
 import pickle
 from pyatmos import expo
 from scipy.special import erf
-from CL_CD_SUTTON import  calculate_cd_cl
+from CL_CD_modified_sentman import  calculate_cd_cl
+from KNN_model import query_knn
+from TwoBP import car2NNSOE, car2NNSOE_density
+from Density_model import model_density, scaler, target_scaler, density_get
+from Transformations import C1, Frenet2LVLH
+
+
+km2m = 1e3  # Conversion factor from kilometers to meters
+
+## Load the density model - Neareast Neighbour Interpolator
+# Loading the saved KDTree and associated data
+with open("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\knn_model.pkl", 'rb') as f:
+    kdtree = pickle.load(f)  # Load the KDTree
+    density_flat = pickle.load(f)  # Load the density values
+    M_flat = pickle.load(f)  # Load the molar mass values
+    T_flat = pickle.load(f)  # Load the temperature values
 
 ## calculate lift and drag forces on a spacecraft
+
+def normalize(v):
+    """Normalize a vector."""
+    return v / np.linalg.norm(v)
+
 
 def lookup_surface_properties(angle, poly_coeffs):
     surfaces_data = []
@@ -54,40 +74,115 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, C_D, C_L, area_
     
     return a_drag_total, a_lift_total
 
+# Function to calculate drag and lift for a given spacecraft
+def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA):
+    a_drag_total = np.zeros(3)  # Initialize drag acceleration vector
+    a_lift_total = np.zeros(3)  # Initialize lift acceleration vector
+    
+    spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
+    Area = data["S/C"][1]  # Cross-sectional area (m^2)  
+    # Loop through the surfaces and calculate drag and lift contributions
+    for surface in surface_properties:
+        normal_vector = np.array(surface[:3])  # Extract normal vector
+        projected_area = surface[3]  # Extract projected area
+
+        # CL and CD calculation
+        S_i = projected_area  # Area of the plate (m^2)
+        S_ref_i = 1000  # large common demoninator for CL and CD
+
+
+        # gamma for this surface
+        v_inc_normalized = normalize(v_rel)
+        n_i_normalized = normalize(normal_vector)
+        theta = np.arccos(np.dot(v_inc_normalized, n_i_normalized))
+        gamma_i = np.cos(theta)
+
+        # direction cosine for llift direction for this surface
+        lift_direction = np.cross( normal_vector,v_rel)
+        lift_direction_normalized = normalize(lift_direction)
+        
+
+        l_i = np.sin(theta)
+
+        v_inc = np.linalg.norm(v_rel)  # Incoming velocity (m/s) - Example for low Earth orbit speed
+        Ma = M  # Mean molar mass of air (g/mol)
+        Ta = T  # Ambient temperature (K)
+        alpha_acc = 1.0  # Accommodation coefficient
+
+        # Calculate Cd and Cl for this surface
+        C_D, C_L = calculate_cd_cl(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc)
+
+        # Calculate drag coefficient for this surface
+        B_D =  spacecraft_mass / (Area*projected_area * C_D) 
+        
+        # Calculate lift coefficient for this surface
+        B_L = spacecraft_mass / (Area*projected_area * C_L) 
+        
+        # Drag acts opposite to velocity
+        drag_direction = v_rel / np.linalg.norm(v_rel)
+        
+        lift_direction = np.cross(lift_direction_normalized, v_inc_normalized)
+        
+        # Calculate the contribution to drag acceleration from this surface
+        a_drag = 0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction
+        a_drag_total += a_drag/spacecraft_mass
+        
+        # Calculate the contribution to lift acceleration from this surface
+        a_lift = 0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction
+        a_lift_total += a_lift/spacecraft_mass
+    
+    return a_drag_total, a_lift_total
+
 # Generic function to compute aerodynamic forces for a spacecraft entity
-def compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv, rr, h):
+def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
     # Relative velocity of the spacecraft
     v_rel = vv - np.cross([0, 0, entity_data["Primary"][2]], rr) # absoluate velocity - Earth rotation factor
     
+
     # Density value at the spacecraft's altitude
-    rho_val =expo(h, 'geopotential')
-    rho = rho_val.rho[0]
-    
+    # h = np.linalg.norm(rr) - entity_data["Primary"][1]
+    # rho_val =expo(h, 'geopotential')
+    # rho = rho_val.rho[0]
+
+    rr_mag = np.linalg.norm(rr)
+
+    # Convert the position vector and velocity to NNSOE
+    NNSOE_den = car2NNSOE_density(rr, vv, entity_data["Primary"][0])
+    i = NNSOE_den[2]
+    u = NNSOE_den[3]
+
+    # Query the KNN model to get density, molar mass, and temperature
+    #rho, M, T = query_knn(rr_mag, u, i, kdtree, density_flat, M_flat, T_flat)
+    h = rr_mag - entity_data["Primary"][1]
+    rho, M , T = density_get(h,u,i,model_density, scaler, target_scaler)
     # Lookup surface properties based on the angle of attack
-    surface_properties = lookup_surface_properties(alpha, loaded_polynomials)
+    surface_properties = lookup_surface_properties(AOA*180/np.pi, loaded_polynomials)
     
-    # Reference area (this can be modified if AoA affects it)
-    A_cross = 0.25  # Simplified constant cross-sectional area
-    
-    # Drag and lift coefficients (simplified models)
-    C_D = 0.9
-    C_L = 0.1
     
     # Calculate drag and lift for the spacecraft
-    a_drag, a_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties, C_D, C_L, A_cross, entity_data["S/C"][0])
+    a_drag, a_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T , entity_data,AOA)
     
     return a_drag, a_lift
 
 # Main function to compute forces for multiple spacecraft
-def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr, h_list):
+def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr):
     # vv and rr are matrix
     forces = []
     for i, alpha in enumerate(alpha_list):
-        h = h_list[i]
         entity_data = data # we need to add two spacecraft details
-        a_drag, a_lift = compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv[i], rr[i], h)
-        forces.append((a_drag, a_lift))
-    return forces
+        a_drag, a_lift = compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv[i], rr[i])
+        print(a_drag)
+        print(a_lift)
+        rel_f = a_drag + a_lift
+        # F_frenet_l = np.matmul(C1(alpha),np.array(a_lift))
+        # F_LVLH_l = np.matmul(Frenet2LVLH(rr[i],vv[i]), F_frenet_l)
+        # F_frenet_D = np.matmul(C1(alpha),np.array(a_drag))
+        # F_LVLH_D = np.matmul(Frenet2LVLH(rr[i],vv[i]),F_frenet_D)
+        F_LVLH_l = np.matmul(Frenet2LVLH(rr[i],vv[i]), np.array(rel_f))
+
+
+
+    return F_LVLH_l
 
 # Function to load the precomputed polynomial coefficients from a file
 def load_polynomials(filename='polynomials.pkl'):
@@ -135,25 +230,51 @@ def compute_ctau(delta, s):
 # print(f"Shear coefficient (C_tau): {C_tau}")
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Load the polynomial coefficients from a saved file
-    loaded_polynomials = load_polynomials('../helper_files/polynomials.pkl')
-    
-    # Assume `data`, `vv`, `rr`, `alpha_list`, and `h_list` are defined
-    # `alpha_list` contains angles of attack for each entity (chief, deputy, or others)
-    # `h_list` contains the altitudes for each entity
 
-    # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
-    data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
+## Loaded polynomial coefficients
+loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
 
-    # Example data for one or more entities
-    vv= np.array([[1, 2, 3], [4, 5, 6]])  # Relative velocity for each entity
-    rr = np.array([[7, 8, 9], [10, 11, 12]])  # Position vector for each entity
-    h_list = [100, 200]  # Altitude for each entity
-    alpha_list = [10, 20]  # Angle of attack for each entity
-    forces = compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr, h_list)
+
+
+# # Example usage:
+# if __name__ == "__main__":
+#     # Load the polynomial coefficients from a saved file
+#     loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
     
-    for i, (a_drag, a_lift) in enumerate(forces):
-        print(f"Entity {i+1} drag acceleration: {a_drag}")
-        print(f"Entity {i+1} lift acceleration: {a_lift}")
+#     # Assume `data`, `vv`, `rr`, `alpha_list`, and `h_list` are defined
+#     # `alpha_list` contains angles of attack for each entity (chief, deputy, or others)
+#     # `h_list` contains the altitudes for each entity
+
+#     # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
+#     data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
+
+#     # Example data for one or more entities
+#     r1 = np.array([100.7097218, -6000.5465031, -3291.97461733])
+#     print(np.linalg.norm(r1))
+#     v1 = np.array([0.05719481, -3.95747941, 6.78077862])
+
+#     r2 = np.array([82.15330852, -5684.43257548, -3114.50144513])
+#     v2 = np.array([0.05410418, -3.74362997, 6.90235197])
+
+#     print("Loading density model...")
+
+
+#     print("Computing forces for entities...")
+#     print(np.linalg.norm(r1))
+
+#     # vv = np.vstack([v1, v2])
+#     # rr = np.vstack([r1, r2])
+
+#     vv = np.vstack([v1])
+#     rr = np.vstack([r1])
+#     h_list = [200]  # Altitude for each entity
+#     alpha_list = [80*np.pi/180]  # Angle of attack for each entity
+#     forces = compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
+    
+# # Assuming forces is a 2xN array where the first row is drag and the second row is lift
+# for i in range(forces.shape[1]):
+#     a_drag = forces[0, i]  # First row corresponds to drag
+#     a_lift = forces[1, i]  # Second row corresponds to lift
+#     print(f"Entity {i+1} drag acceleration: {a_drag}")
+#     print(f"Entity {i+1} lift acceleration: {a_lift}")
+

@@ -18,74 +18,147 @@ from pyatmos import expo
 from Transformations import PQW2ECI,RSW2ECI
 from Perturbations import aspherical_perturbation,atmosphheric_drag
 
+
 # conversion factor
 Rad2deg=180/math.pi
 
 
 def car2kep(r,v,mu):
-
-    # Cartesian to orbital elements convertion function
+    """
+    Convert from Cartesian coordinates (r, v) to classical orbital elements (COEs).
     
-    # magnitude of position
-    r_m=numpy.sqrt(r[0]**2+r[1]**2+r[2]**2)
+    Parameters:
+    r (numpy.ndarray): Position vector [x, y, z] (km)
+    v (numpy.ndarray): Velocity vector [vx, vy, vz] (km/s)
+    mu (float): Standard gravitational parameter (km^3/s^2)
     
-    # magnitude of velocity
-    v_m=numpy.sqrt(v[0]**2+v[1]**2+v[2]**2)
+    Returns:
+    COE: Tuple containing two numpy arrays:
+         1. COE_vec: [h_x, h_y, h_z, e_x, e_y, e_z, i, RAAN, omega, theta] in radians
+         2. COE_mag: [h_m, e_m, i (deg), RAAN (deg), omega (deg), theta (deg)]
+    """
     
-    # specific angular momentum
-    h=numpy.cross(r,v)
+    # Magnitude of position and velocity
+    r_mag = numpy.linalg.norm(r)
+    v_mag = numpy.linalg.norm(v)
     
-    # magnitude of specific angular momentum
-    h_m=numpy.sqrt(h[0]**2+h[1]**2+h[2]**2)
-
-    # Inclincation i
-    i=numpy.arccos(h[2]/h_m)
+    # Specific angular momentum
+    h = numpy.cross(r, v)
+    h_mag = numpy.linalg.norm(h)
     
-    # Lines of nodes vector N
-    K=[0,0,1]
-    N=numpy.cross(K,h)
+    # Inclination
+    i = numpy.arccos(h[2] / h_mag)
     
-    N_m=numpy.sqrt(N[0]**2+N[1]**2+N[2]**2)
-
-    #right ascension of ascending node
-    Omega_temp=numpy.arccos(N[0]/N_m)
+    # Node vector (used for RAAN)
+    K = numpy.array([0, 0, 1])
+    N = numpy.cross(K, h)
+    N_mag = numpy.linalg.norm(N)
+    I = numpy.array([1, 0, 0])
     
-    if N[1]>=0:
-        Omega=Omega_temp
-    elif N[1]<0:
-        Omega=2*numpy.pi-Omega_temp     
+    # Right Ascension of Ascending Node (RAAN)
+    if N_mag != 0:
+        Omega = numpy.arccos(N[0] / N_mag)
+        if N[1] < 0:
+            Omega = 2 * numpy.pi - Omega
+    else:
+        Omega = 0
     
+    # Eccentricity vector
+    e_vec = (1/mu) * (numpy.cross(v, h) - mu * (r / r_mag))
+    e_mag = numpy.linalg.norm(e_vec)
     
-    # eccentricity vector
+    # Argument of periapsis (omega)
+    if N_mag != 0 and e_mag != 0:
+        omega = numpy.arccos(numpy.dot(N / N_mag, e_vec / e_mag))
+        if e_vec[2] < 0:
+            omega = 2 * numpy.pi - omega
+    else:
+        omega = 0
     
-    e=(1/mu)*(numpy.cross(v,h)-mu*(r/r_m))
+    # True anomaly (theta)
+    if e_mag != 0:
+        theta = numpy.arccos(numpy.dot(e_vec / e_mag, r / r_mag))
+        if numpy.dot(r, v) < 0:
+            theta = 2 * numpy.pi - theta
+    else:
+        theta = 0
     
-    e_m=numpy.sqrt(e[0]**2+e[1]**2+e[2]**2)
+    # Semi-major axis (a)
+    a = 1 / ((2 / r_mag) - (v_mag ** 2 / mu))
     
-    # argument of periapsis
+    # COE_vec contains the components of h, e, i, Omega, omega, and theta (in radians)
+    COE_vec = numpy.array([h[0], h[1], h[2], e_vec[0], e_vec[1], e_vec[2], i, Omega, omega, theta])
     
-    omega_temp=numpy.arccos(numpy.dot((N/N_m),(e/e_m)))
+    # COE_mag contains the magnitudes of h, e, and the angular elements converted to degrees
+    COE_mag = numpy.array([h_mag, e_mag,  i,  Omega, omega,  theta])
     
-    if e[2]>=0:
-        omega=omega_temp
-    elif e[2]<0:
-        omega=2*numpy.pi-omega_temp 
-        
-    # true anomaly
-    
-    theta_temp=numpy.arccos(numpy.dot(e,r)/(e_m*r_m))
-    
-    if numpy.dot(r,v)>=0:
-        theta=theta_temp
-    elif numpy.dot(r,v)<0:
-        theta=2*numpy.pi-theta_temp 
-    
-    COE_vec=numpy.array([h[0],h[1],h[2],e[0],e[1],e[2],i,Omega,omega,theta])
-    COE_mag=numpy.array([h_m,e_m,Rad2deg*i,Rad2deg*Omega,Rad2deg*omega,Rad2deg*theta])
     # orbital elements = [angular momentum, eccentricity, inclination, RAAN, argument of perigee, true anomaly]
     COE=(COE_vec,COE_mag)
     
     return COE
+
+
+
+def car2NNSOE(r, v, mu):
+    """
+    Convert from Cartesian coordinates (r, v) directly to non-singular elements.
+    
+    Parameters:
+    r (numpy.ndarray): Position vector [x, y, z] (km)
+    v (numpy.ndarray): Velocity vector [vx, vy, vz] (km/s)
+    mu (float): Standard gravitational parameter (km^3/s^2)
+    
+    Returns:
+    Non-singular elements [a, l, i, q1, q2, Omega]
+    """
+    
+    # Step 1: Get classical orbital elements (COEs) from position and velocity
+    COE_temp= car2kep(r, v, mu)
+    
+
+    a = COE_temp[0]**2 / (mu * (1 - COE_temp[1]**2))
+    COE = numpy.array([a, COE_temp[1], COE_temp[2], COE_temp[3], COE_temp[4], COE_temp[5]])
+
+    a = COE[0]
+    M=theta2M(COE[5],COE[1])
+    l = M+COE[4]
+    i = COE[2]
+    q1 = COE[1]*numpy.sin(COE[4])
+    q2 = COE[1]*numpy.cos(COE[4])
+    OM = COE[3]
+    # Return non-singular elements
+    return numpy.array([a, l, i, q1, q2, OM])
+
+def car2NNSOE_density(r, v, mu):
+    """
+    Convert from Cartesian coordinates (r, v) directly to non-singular elements.
+    
+    Parameters:
+    r (numpy.ndarray): Position vector [x, y, z] (km)
+    v (numpy.ndarray): Velocity vector [vx, vy, vz] (km/s)
+    mu (float): Standard gravitational parameter (km^3/s^2)
+    
+    Returns:
+    Non-singular elements [a, l, i, q1, q2, Omega]
+    """
+    
+    # Step 1: Get classical orbital elements (COEs) from position and velocity
+    _,COE_temp= car2kep(r, v, mu)
+    
+
+    a = (COE_temp[0]**2 )/ (mu * (1 - COE_temp[1]**2))
+    COE = numpy.array([a, COE_temp[1], COE_temp[2], COE_temp[3], COE_temp[4], COE_temp[5]])
+
+    a = COE[0]
+    M=theta2M(COE[5],COE[1])
+    l = M+COE[4]
+    u = COE[5] + COE[4]
+    i = COE[2]
+    q1 = COE[1]*numpy.sin(COE[4])
+    q2 = COE[1]*numpy.cos(COE[4])
+    OM = COE[3]
+    # Return non-singular elements
+    return numpy.array([a, l, i, u])
 
 def kep2car(COE,mu):
     h = COE[0]
@@ -161,6 +234,7 @@ def NSROE2car(ROE,param):
     RR=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(rp))
     VV=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(vp))
 
+
     return (RR,VV)
 
 
@@ -206,11 +280,13 @@ def OE_Timetotheta(COE,T,mu):
 
 def M2theta(M,e,tol):
 
+    if numpy.isnan(e):
+        print("Eccentricity is not defined")
     if M < numpy.pi :
-        E0=M+e/2
+        E0=M + (e/2)
     elif M >numpy.pi:
-        E0=M- e/2
-    toll_diff =10
+        E0=M - (e/2)
+    toll_diff = 10
     while (toll_diff>tol):
         term1 = E0-e*numpy.sin(E0)-M
         term2 = 1-e*numpy.cos(E0)
@@ -496,6 +572,7 @@ def guess_nonsingular_Bmat(t,yy,param,yaw):
 
 
 
+
     e=numpy.sqrt(q1**2 + q2**2)
     h=numpy.sqrt(mu*a*(1-e**2))
     term1=(h**2)/(mu)
@@ -538,37 +615,37 @@ def guess_nonsingular_Bmat(t,yy,param,yaw):
     # h_h = numpy.cross( rr, vv ) / numpy.linalg.norm(numpy.cross(rr, vv ) )           # angular momentum veror
     # n_h = numpy.cross( h_h, t_h ) 
 
-    # Use a simple atmospheric model for density - needs to be substituted with a proper model later
-    hc= numpy.abs(data["Primary"][1] - r)
+    # # # # # # Use a simple atmospheric model for density - needs to be substituted with a proper model later
+    # # # # # hc= numpy.abs(data["Primary"][1] - r)
 
-    hd = numpy.abs(data["Primary"][1] - r)
+    # # # # # hd = numpy.abs(data["Primary"][1] - r)
 
-    rho_val = expo(h,'geopotential') # geopotential altitudes
+    # # # # # rho_val = expo(h,'geopotential') # geopotential altitudes
 
-    rho = rho_val.rho[0]
-    # Reference area - function of angle of attack - look up table
-    A_cross = 0.25
+    # # # # # rho = rho_val.rho[0]
+    # # # # # # Reference area - function of angle of attack - look up table
+    # # # # # A_cross = 0.25
 
-    # Drag coefficient - function of angle of attack - look up table - simpified model
-    C_D = 0.9
+    # # # # # # Drag coefficient - function of angle of attack - look up table - simpified model
+    # # # # # C_D = 0.9
 
-    # Drag Ballistic coefficient - function of angle of attack - look up table - simplified model
-    B_D = A_cross * C_D/data["S/C"][0]
+    # # # # # # Drag Ballistic coefficient - function of angle of attack - look up table - simplified model
+    # # # # # B_D = A_cross * C_D/data["S/C"][0]
 
-    # Lift coefficient - function of angle of attack - look up table - simplified model
-    C_L = 0.1
+    # # # # # # Lift coefficient - function of angle of attack - look up table - simplified model
+    # # # # # C_L = 0.1
 
-    # Lift Ballistic coefficient - function of angle of attack - look up table - simplified model
-    B_L = A_cross * C_L/data["S/C"][0]
+    # # # # # # Lift Ballistic coefficient - function of angle of attack - look up table - simplified model
+    # # # # # B_L = A_cross * C_L/data["S/C"][0]
 
-    # Taking into account the Earth rotation
-    v_rel = vv - numpy.cross([0,0,data["Primary"][2]],rr)
-    v_rel_hat = v_rel/numpy.linalg.norm(v_rel)
-    # Drag acceleration
-    a_drag = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_D
+    # # # # # # Taking into account the Earth rotation
+    # # # # # v_rel = vv - numpy.cross([0,0,data["Primary"][2]],rr)
+    # # # # # v_rel_hat = v_rel/numpy.linalg.norm(v_rel)
+    # # # # # # Drag acceleration
+    # # # # # a_drag = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_D
 
-    # Lift acceleration
-    a_lift = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_L
+    # # # # # # Lift acceleration
+    # # # # # a_lift = -0.5 * rho * v_rel_hat * numpy.linalg.norm(v_rel) *B_L
 
 
 
@@ -596,12 +673,12 @@ def guess_nonsingular_Bmat(t,yy,param,yaw):
     y_dot_2 = numpy.array([0, 0, (r * numpy.cos(u)) / h])
 
     t1 = (p * numpy.sin(u)) / h
-    t2 = ((p + r) / h) * (numpy.cos(u) + r * q1)
+    t2 = (1/h)*((p + r)*numpy.cos(u) + r * q1)
     t3 = (r * q2 * numpy.sin(u) * numpy.cos(i)) / (h * numpy.sin(i))
     y_dot_3 = numpy.array([t1, t2, t3])
 
     t1 = (p * numpy.cos(u)) / h
-    t2 = ((p + r) / h) * (numpy.sin(u) + r * q2)
+    t2 = (1/h)*((p + r)*numpy.cos(u) + r * q1)
     t3 = (r * q1 * numpy.sin(u) * numpy.cos(i)) / (h * numpy.sin(i))
     y_dot_4 = numpy.array([-t1, t2, -t3])
 
@@ -633,6 +710,10 @@ def lagrage_J2_diff(t,yy,data):
 
 
 
+
+    if l > 100:
+        print("ANAMOLY",l)  
+
     e=numpy.sqrt(q1**2 + q2**2)
     h=numpy.sqrt(mu*a*(1-e**2))
     term1=(h**2)/(mu)
@@ -658,7 +739,7 @@ def lagrage_J2_diff(t,yy,data):
 
     # Compute each component
     component_1 = 0
-    component_2 = n + (3/4) * J2 * (Re / p)**2 * n * (eta * (3 * numpy.cos(i)**2 - 1) + (5 * numpy.cos(i)**2 - 1))
+    component_2 = n + ((3/4) * J2 * (Re / p)**2 * n) * (eta * (3 * numpy.cos(i)**2 - 1) + (5 * numpy.cos(i)**2 - 1))
     component_3 = 0
     component_4 = - (3/4) * J2 * (Re / p)**2 * n * (3 * numpy.cos(i)**2 - 1) * q2
     component_5 = (3/4) * J2 * (Re / p)**2 * n * (3 * numpy.cos(i)**2 - 1) * q1
@@ -693,6 +774,9 @@ def Lagrange_deri(t,yy,param):
     q1 = yy[3]
     q2 = yy[4]
     OM = yy[5]
+
+
+
 
     q1_0 = param["Init"][0]
     q2_0 = param["Init"][1]
@@ -784,7 +868,7 @@ def Lagrange_deri(t,yy,param):
 
     term_q2_i= ((-15*epsilon)/(4)) *  q1 *numpy.sin(2*i) 
 
-    term_q2_q1 = ((3*epsilon)/(4)) *(1+((4*q2**2)/eta**2))* (((5*numpy.cos(i)**2)-1)) 
+    term_q2_q1 = ((3*epsilon)/(4)) *(1+((4*q1**2)/eta**2))* (((5*numpy.cos(i)**2)-1)) 
 
     term_q2_q2_1 = ((3*epsilon)/(eta**2)) * (((5*numpy.cos(i)**2)-1)) 
     term_q2_q2 = term_q2_q2_1 * q1 * q2
@@ -806,43 +890,96 @@ def Lagrange_deri(t,yy,param):
         
     return A_mat
 
-def yaw_dynamics(t,yy,param):
+# def yaw_dynamics(t,yy,param):
 
-    Izc=param["sat"][0]
-    Izd=param["sat"][1]
+#     Izc=param["sat"][0]
+#     Izd=param["sat"][1]
 
-    y_dot=numpy.zeros((2,))
+#     y_dot=numpy.zeros((2,))
 
-    u=numpy.zeros((2,1))
+#     u=numpy.zeros((2,1))
 
-    y_dot[0]=-Izc*u[0] 
-    y_dot[1]=-Izd*u[1]
+#     y_dot[0]=-Izc*u[0] 
+#     y_dot[1]=-Izd*u[1]
 
-    return y_dot
+#     return y_dot
 
-def Dynamics(t,yy,param):
+# def Dynamics(t,yy,param):
 
-
-    y_dot_chief=absolute_NSROE_dynamics(t,yy[6:12],param)
+#     y_dot_chief=absolute_NSROE_dynamics(t,yy[6:12],param)
     
-    A=Lagrange_deri(t,yy[6:12],param)
-    B=guess_nonsingular_Bmat(t,yy[6:12],param,yy[12:14])
+#     A=Lagrange_deri(t,yy[6:12],param)
+#     B=guess_nonsingular_Bmat(t,yy[6:12],param,yy[12:14])
     
-    y_dot_yaw=yaw_dynamics(t,yy[12:14],param)
+#     y_dot_yaw=yaw_dynamics(t,yy[12:14],param)
     
-    y_dot=numpy.matmul(A,yy[0:6])+numpy.matmul(B,numpy.array([0,0,0]))
+#     y_dot=numpy.matmul(A,yy[0:6])+numpy.matmul(B,numpy.array([0,0,0]))
 
-    y = numpy.concatenate((y_dot,y_dot_chief,y_dot_yaw))
+#     y = numpy.concatenate((y_dot,y_dot_chief,y_dot_yaw))
 
-    return y
+#     return y
 
-def absolute_NSROE_dynamics(t,yy,param):
+# def yaw_dynamics_N(t, yy, param):
+#     N_deputies = param["N_deputies"]  # Number of deputies (including chief)
+#     Iz = param["sat"]  # Assume that the moment of inertia is provided for each satellite
+
+#     y_dot = numpy.zeros(N_deputies + 1)  # Initialize yaw derivatives for all spacecraft
+#     u = numpy.zeros((N_deputies + 1, 1))  # Control input (can be updated based on control logic)
+
+#     # Loop over each spacecraft (including chief)
+#     for i in range(N_deputies + 1):
+#         y_dot[i] = -Iz[i] * u[i]  # Yaw dynamics for each spacecraft
+
+#     return y_dot
+
+# def Dynamics_N(t, yy, data):
+#     N_deputies = data["N_deputies"]  # Number of deputies
+#     mu = data["Primary"][0]
     
-    A=lagrage_J2_diff(t,yy,param)
-    B=guess_nonsingular_Bmat(t,yy,param,yy[12:14])
-    y_dot=A+numpy.matmul(B,numpy.array([0,0,0]))
+#     y_dot_all = []
 
-    return y_dot
+#     # Loop over each deputy for relative dynamics
+#     for d in range(N_deputies):
+#         start_idx = d * 6
+#         deputy_state = yy[start_idx:start_idx + 6]
+        
+#         # Apply relative dynamics for each deputy (implement relative dynamics here)
+#         y_dot_deputy = numpy.zeros(6)  # Placeholder for relative dynamics of deputies
+#         y_dot_all.append(y_dot_deputy)
+
+#     # Chief satellite dynamics
+#     chief_start_idx = 6 * N_deputies
+#     chief_state = yy[chief_start_idx:chief_start_idx + 6]
+#     y_dot_chief = absolute_NSROE_dynamics(t, chief_state, data)  # Chief dynamics
+
+#     # Yaw dynamics for chief + deputies (one yaw state per spacecraft)
+#     yaw_start = 6 * (N_deputies + 1)  # Yaw states start after the chief orbital elements
+#     yaw_states = yy[yaw_start:]  # Extract yaw states (one per spacecraft: chief + deputies)
+
+#     # Calculate yaw dynamics
+#     yaw_dot = yaw_dynamics_N(t, yaw_states, data)  # Yaw dynamics for all spacecraft
+
+#     # Combine the results
+#     y_dot_total = numpy.concatenate([numpy.concatenate(y_dot_all), y_dot_chief, yaw_dot])
+    
+#     return y_dot_total
+
+
+
+# def absolute_NSROE_dynamics(t,yy,param):
+    
+#     A=lagrage_J2_diff(t,yy,param)
+#     B=guess_nonsingular_Bmat(t,yy,param,yy[12:14])
+
+#     # convert the NSROE to ECI frame to get the aerodynamic forces
+#     rr,vv=NSROE2car(yy[0:6])
+#     data ={}
+#     data['Primary']= param['Primary']
+#     data['S/C']= [param["satellites"]["chief"]["mass"],param["satellites"]["chief"]["area"]]
+#     compute_forces_for_entities(data,loaded_polynomials,rr,vv)
+#     y_dot=A+numpy.matmul(B,numpy.array([0,0,0]))
+
+#     return y_dot
 
 
 def Cart2RO(RO,OE_1):
@@ -925,16 +1062,16 @@ def Param2NROE(NOE, parameters,data):
     delta_Omega = (-rho_3 * numpy.sin(beta_0)) / (p * numpy.sin(i))
     
     # Equation 12 (uses 'lambda_' from orbital elements)
-    delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - ((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
+    delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
     
     # Equation 13
     delta_i = (rho_3 / p) * numpy.cos(beta_0)
     
     # Equation 14
-    delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
     
     # Equation 15
-    delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
     
     # Return as vector
     return numpy.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
@@ -1099,14 +1236,14 @@ def NSROE2LVLH(NSROE,NSOE0,data):
 
 
     e1 =(a / eta) * ((1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
-        - (q1 * delta_q1 + q2 * delta_q2)**2 + delta_q1**2 + delta_q2**2)**0.5
+        - ((q1 * delta_q1 + q2 * delta_q2)**2) + delta_q1**2 + delta_q2**2)**0.5
 
 
     e2 = p * (delta_Omega * numpy.cos(i) + ( (1 + eta + eta**2) / (eta**3 * (1 + eta)) ) * (q2 * delta_q1 - q1 * delta_q2) 
         + (1 / eta**3) * delta_lambda0 )
 
 
-    e3 =   p * (delta_i**2 + delta_Omega**2 * numpy.sin(i)**2)**0.5
+    e3 =   p * ((delta_i**2) + (delta_Omega**2) * (numpy.sin(i)**2))**0.5
 
 
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
@@ -1127,8 +1264,144 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     
     z_p = (e3 / p) * numpy.sin(u + beta_0)
 
-    return numpy.array([x_p, y_p, z_p])
+    return r*numpy.array([x_p, y_p, z_p])
 
+def calculate_orbital_parameters(NSOE, mu):
+    """
+    Calculate orbital parameters such as eccentricity, angular momentum, 
+    true anomaly, and radius based on the given orbital elements.
+    
+    Parameters:
+    NSOE: List of orbital elements (a, l, i, q1, q2, OM)
+    mu: Gravitational parameter of the central body (Earth's mu = 3.986004418e5 km^3/s^2)
+    
+    Returns:
+    numpy array -> eccentricity, angular momentum,perimeter, periapsis, argument of latitude, radial distance
+    """
+    # Extract orbital elements
+    a = NSOE[0]  # Semi-major axis
+    l = NSOE[1]  # Mean longitude
+    q1 = NSOE[3] # Eccentricity component q1
+    q2 = NSOE[4] # Eccentricity component q2
+
+    # Calculate eccentricity
+    e = numpy.sqrt(q1**2 + q2**2)
+    
+    # Calculate angular momentum
+    h = numpy.sqrt(mu * a * (1 - e**2))
+    
+    # Calculate the semi-latus rectum (p)
+    p = h**2 / mu
+    
+    # Calculate periapsis
+    rp = a * (1 - e)
+    
+    # Calculate eta
+    eta = numpy.sqrt(1 - q1**2 - q2**2)
+
+    # Calculate true anomaly (u) and radius (r)
+    if e == 0:  
+        u = l
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+    else:
+        omega_peri = numpy.arccos(q1 / e)
+        mean_anomaly = l - omega_peri
+        
+        # Call a function to calculate theta (true anomaly) from the mean anomaly
+        theta_tuple = M2theta(mean_anomaly, e, 1e-8)  # This function should return theta (true anomaly)
+        theta = theta_tuple[0]
+        
+        # Calculate true anomaly (u)
+        u = theta + omega_peri
+        
+        # Calculate radius (r)
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+    
+    return numpy.array([e, h, p, rp, u, r])
+
+def NSROE2LVLH_2(NSROE, NSOE0, data):
+    # conversion from relative orbital elements to LVLH frame based on the provided formulation
+
+    # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
+    data = {"J": [0.1082626925638815e-2, 0, 0], "S/C": [300, 2, 0.9, 300], "Primary": [3.98600433e5, 6378.16, 7.2921150e-5]}
+    mu = data["Primary"][0]
+    Re = data["Primary"][1]
+    
+    # assigning the state variables
+    a = NSOE0[0]
+    l = NSOE0[1]
+    i = NSOE0[2]
+    q1 = NSOE0[3]
+    q2 = NSOE0[4]
+    OM = NSOE0[5]
+
+    delta_a = NSROE[0]
+    delta_lambda0 = NSROE[1]
+    delta_i = NSROE[2]
+    delta_q1 = NSROE[3]
+    delta_q2 = NSROE[4]
+    delta_Omega = NSROE[5]
+
+
+    # Compute deputy orbital elements
+    a_d = a + delta_a               # Deputy semi-major axis
+    l_d = l + delta_lambda0         # Deputy mean longitude
+    i_d = i + delta_i               # Deputy inclination
+    q1_d = q1 + delta_q1            # Deputy eccentricity term q1
+    q2_d = q2 + delta_q2            # Deputy eccentricity term q2
+    OM_d = OM + delta_Omega         # Deputy RAAN
+
+    # Calculate orbital parameters for the chief and deputy
+    chief_params = calculate_orbital_parameters(numpy.array([a, l, i, q1, q2, OM]), mu)
+    deputy_params = calculate_orbital_parameters(numpy.array([a_d, l_d, i_d, q1_d, q2_d, OM_d]), mu)
+
+    delta_u = deputy_params[4] - chief_params[4]
+    e, h, p, rp, u, r = chief_params
+    # print("chief_params: ", chief_params)
+    print("delta_u: ", delta_u)
+    print("delta_lambda0: ", delta_lambda0)
+    print("delta_i: ", delta_i)
+    print("delta_a: ", delta_a)
+    # e = numpy.sqrt(q1**2 + q2**2)
+    # h = numpy.sqrt(mu * a * (1 - e**2))
+    # p = h**2 / mu
+    # rp = a * (1 - e)
+    # eta = numpy.sqrt(1 - q1**2 - q2**2)
+    
+    # if e == 0:  
+    #     u = l
+    #     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+    # else:
+    #     omega_peri = numpy.arccos(q1 / e)
+    #     mean_anomaly = l - omega_peri
+    #     theta_tuple = M2theta(mean_anomaly, e, 1e-8)
+    #     theta = theta_tuple[0]
+    #     u = theta + omega_peri
+    #     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+
+    # Calculating radial and transverse velocity components
+    Vr = (h / p) * (q1 * numpy.sin(u) - q2 * numpy.cos(u))
+    Vt = (h / p) * (1 + q1 * numpy.cos(u) + q2 * numpy.sin(u))
+
+    # Applying the equations from the image (C.1, C.2, C.3)
+    
+    # x component
+    x = (r/a) * (delta_a) + (Vr / Vt) * r * delta_u - (r / p) * (2 * a * q1 + r * numpy.cos(u)) * delta_q1 - (r / p) * (2 * a * q2 + r * numpy.sin(u)) * delta_q2
+    
+    # y component
+    y = r * (delta_u + (numpy.cos(i) * delta_Omega))
+
+    if y > 2:
+        print("y: ", y)
+        print("delta_u: ", delta_u)
+        print("delta_Omega: ", delta_Omega)
+        print("i: ", i)
+        print("delta_i: ", delta_i)    
+    # z component
+    z = r * (numpy.sin(u) * delta_i - numpy.cos(u) * numpy.sin(i) * delta_Omega)
+
+    # Output the position vector in the LVLH frame
+    return numpy.array([x, y, z])
 
 def calculate_flight_path_angle(r_vec, v_vec):
     """

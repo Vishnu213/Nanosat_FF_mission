@@ -98,7 +98,9 @@ def Frenetframe(rr,vv):
     Rot_FrenetFrame = numpy.vstack([T_unit, N_unit, W_unit])
     return Rot_FrenetFrame
 
-def Frenet2LVLH(RR_Frenet,RR_LVLH):
+def Frenet2LVLH(rr,vv):
+    RR_Frenet=Frenetframe(rr,vv)
+    RR_LVLH = LVLHframe(rr,vv)
     Rot_F2LVLH = numpy.matmul(RR_LVLH,numpy.linalg.inv(RR_Frenet).transpose())
     return Rot_F2LVLH
 
