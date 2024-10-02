@@ -31,15 +31,15 @@ def yaw_dynamics_N(t, yy, param):
 
     return y_dot
 
-def yaw_dynamics(t, yy, param):
+def yaw_dynamics(t, yy, param,uu):
     Izc = param["sat"][0]
     Izd = param["sat"][1]
 
     y_dot = numpy.zeros((2,))
     u = numpy.zeros((2, 1))
 
-    y_dot[0] = -Izc * u[0]
-    y_dot[1] = -Izd * u[1]
+    y_dot[0] = -Izc * uu[0]
+    y_dot[1] = -Izd * uu[1]
 
     return y_dot
 
@@ -86,14 +86,14 @@ def Dynamics_N(t, yy, data):
         # Compute forces for the deputy
 
         u_deputy = compute_forces_for_entities(data_deputy, loaded_polynomials, [yy[yaw_start+d]],vv_1, rr_1)
-        u_deputy = numpy.zeros((3))
+        # u_deputy = numpy.zeros((3))
 
         # calculate the differential aerodynamic forces
-        u = u_c - u_deputy
+        u = u_deputy - u_c
         #print("u_c",u_c)
         # Compute the Lagrange matrix (A) and B-matrix for the deputy
-        A_deputy = Lagrange_deri(t, deputy_NSOE, data)
-        B_deputy = guess_nonsingular_Bmat(t, deputy_NSOE,data, numpy.array(yy[yaw_start],yy[yaw_start+d]))  # Yaw specific to each deputy
+        A_deputy = Lagrange_deri(t, chief_state, data)
+        B_deputy = guess_nonsingular_Bmat(t, chief_state,data, numpy.array(yy[yaw_start],yy[yaw_start+d]))  # Yaw specific to each deputy
         #print("A_deputy",A_deputy.shape)
         #print("B_deputy",B_deputy.shape)
         #print("u",u.shape)
@@ -131,10 +131,9 @@ def Dynamics_N(t, yy, data):
     return y_dot_total
 
 def absolute_NSROE_dynamics(t, yy, param,yy_o):
-    print("inside the abs yy0",yy_o)
-    print("inside the abs",yy)
-    if numpy.isnan(yy).any():
-        print("inside the abs",yy)
+    # print("inside the abs yy0",yy_o)
+    # if numpy.isnan(yy).any():
+    #     print("inside the abs",yy)
     A = lagrage_J2_diff(t, yy, param)
     B = guess_nonsingular_Bmat(t, yy, param, yy_o[12:14])
     #print("B",B)
@@ -151,8 +150,8 @@ def absolute_NSROE_dynamics(t, yy, param,yy_o):
     vv_1 = numpy.vstack([vv])   
     u_chief=compute_forces_for_entities(data, loaded_polynomials,yy_o[12:13], vv_1, rr_1)
     u_chief_scale = u_chief * 1e12
-    #u_chief = numpy.zeros((3))
-    y_dot = A + numpy.matmul(B, u_chief_scale/1e12)
+    # u_chief = numpy.zeros((3))
+    y_dot = A + numpy.matmul(B, u_chief)
 
     return y_dot, u_chief
 
@@ -177,7 +176,7 @@ def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
 
     return y_dot, u_chief
 
-def Dynamics(t, yy, param):
+def Dynamics(t, yy, param,uu):
     start_idx = 0
     chief_state = yy[6:12]
     y_dot_chief, u_c = absolute_NSROE_dynamics(t, chief_state, param,yy)
@@ -206,15 +205,14 @@ def Dynamics(t, yy, param):
     # Compute forces for the deputy
 
     u_deputy = compute_forces_for_entities(data_deputy, loaded_polynomials, [yy[13]],vv_1, rr_1)
-    #u_deputy = numpy.zeros((3))
 
     # calculate the differential aerodynamic forces
-    u =  u_deputy*1e12 - u_c
+    u =  u_deputy - u_c
     #print("u_c",u_c)
     # Compute the Lagrange matrix (A) and B-matrix for the deputy
     A_deputy = Lagrange_deri(t, chief_state, param)
     B_deputy = guess_nonsingular_Bmat(t, chief_state, param,yy[12:14])  # Yaw specific to each deputy
-    #print("A_deputy",A_deputy.shape)
+    #print("A_deputy",A_deputy.shape)h
     #print("B_deputy",B_deputy.shape)
     #print("u",u.shape)
     #print("delta_NSROE",delta_NSROE.shape)
@@ -222,7 +220,7 @@ def Dynamics(t, yy, param):
     y_dot_deputy = numpy.matmul(A_deputy, delta_NSROE) + numpy.matmul(B_deputy, u/1e12)
 
     
-    y_dot_yaw = yaw_dynamics(t, yy[12:14], param)
+    y_dot_yaw = yaw_dynamics(t, yy[12:14], param,uu)
     
 
     y = numpy.concatenate((y_dot_deputy, y_dot_chief, y_dot_yaw))

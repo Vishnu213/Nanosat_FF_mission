@@ -19,6 +19,12 @@ import sys
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.gridspec import GridSpec
+
+
+
 ## ADD the packages here if you think it is needed and update it in this file.
 
 ## Import our libraries here
@@ -163,11 +169,11 @@ yy_total = numpy.concatenate((yy_o_flattened, NOE_chief, yaw_c_d))
 mu = data["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # Orbital period
 n_revol_T = 24 * 60 * 60 / Torb  # Number of revolutions per day
-n_revolution = 1 * 365 * n_revol_T  # Simulation for 2 years
-T_total = n_revolution * Torb
+n_revolution = 0.005 * 365 * n_revol_T  # Simulation for 2 years
+T_total = 1#n_revolution * Torb
 
 t_span = [0, T_total]
-teval = numpy.linspace(0, T_total, 20000)
+teval = numpy.linspace(0, T_total, 2000)
 
 # Add the number of deputies to data for passing to Dynamics
 data["N_deputies"] = N_deputies
@@ -175,7 +181,7 @@ data["N_deputies"] = N_deputies
 # Run the simulation using integrate.solve_ivp
 sol = integrate.solve_ivp(
     Dynamics_N, t_span, yy_total, t_eval=teval,
-    method='DOP853', args=(data,), rtol=1e-14, atol=1e-13
+    method='DOP853', args=(data,), rtol=1e-10, atol=1e-10
 )
 
 # Convert NROE to Cartesian coordinates for all deputies
@@ -199,11 +205,6 @@ for i in range(len(sol.y[0])):
 #     plt.legend()
 #     plt.title(f'Relative motion of Deputy {d+1} in LVLH frame')
 #     plt.show()
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import numpy as np
-from matplotlib.gridspec import GridSpec
 
 # Define colors for the deputies
 colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']

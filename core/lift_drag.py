@@ -1,6 +1,6 @@
 import numpy as np
 import pickle
-from pyatmos import expo
+# from pyatmos import expo
 from scipy.special import erf
 from CL_CD_modified_sentman import  calculate_cd_cl
 from KNN_model import query_knn
@@ -171,9 +171,9 @@ def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr):
     for i, alpha in enumerate(alpha_list):
         entity_data = data # we need to add two spacecraft details
         a_drag, a_lift = compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv[i], rr[i])
-        print(a_drag)
-        print(a_lift)
-        rel_f = a_drag + a_lift
+        # print(a_drag)
+        # print(a_lift)
+        rel_f = np.matmul(C1(alpha),np.array(a_drag + a_lift))
         # F_frenet_l = np.matmul(C1(alpha),np.array(a_lift))
         # F_LVLH_l = np.matmul(Frenet2LVLH(rr[i],vv[i]), F_frenet_l)
         # F_frenet_D = np.matmul(C1(alpha),np.array(a_drag))

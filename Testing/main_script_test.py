@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import math
+import time
 ## ADD the packages here if you think it is needed and update it in this file.
 
 ## Import our libraries here
@@ -66,6 +67,7 @@ data = {
 
 }
 
+print("Parameters initialized.")
 
 deg2rad = numpy.pi / 180
 
@@ -78,7 +80,7 @@ deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital  elements/ LVLH initial conditions
 # NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
+NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
 ## MAKE SURE TO FOLLOW RIGHT orbital elements order
  
 
@@ -119,7 +121,7 @@ rho_3 =0 # [m]  - cross-track separation
 alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
 beta = 0#alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0 #-10 # Drift per revolutions m/resolution
-d= -0.3# [m] - along track separation
+d= -1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
 print("RHO_2",rho_2)
 print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
@@ -147,19 +149,41 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 # test for gauess equation
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
-n_revol_T = 24*60*60/Torb
-n_revolution= 1#*n_revol_T
+n_revol_T = 0.005*365*24*60*60/Torb
+n_revolution=  n_revol_T
 T_total=n_revolution*Torb
 
 t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 1000)
+teval=numpy.linspace(0, T_total, 100000)
 # K=numpy.array([k1,k2])
  
 data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
 
-sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-                        method='Radau',args=(data,),rtol=1e-12, atol=1e-15,dense_output=True)
+uu = numpy.zeros((2,1)) # input torque to the dynamics model - it is fed inside the yaw dynamics.
 
+print("Number of Period",n_revolution)
+print("Orbital Period",Torb)
+print("Time of Integration",T_total)
+print("integration time step",teval[1]-teval[0])
+print("Number of data points",len(teval))
+print("Integration starting....")
+
+# Start the timer
+start_time = time.time()
+
+sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
+                        method='DOP853',args=(data,uu), rtol=1e-10, atol=1e-12,dense_output=True)
+
+# End the timer
+end_time = time.time()
+
+# Calculate the time taken
+execution_time = end_time - start_time
+
+# Print the execution time
+print(f"Time taken for integration: {execution_time:.4f} seconds")
+
+print("Integration done....")
 
 # Convert from NROE to Carterian co-ordinates. 
 rr_s=numpy.zeros((3,len(sol.y[0])))
@@ -171,6 +195,7 @@ for i in range(0,len(sol.y[0])):
  
     # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
     #                                            sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
+    
     yy1=sol.y[0:6,i]
     yy2=sol.y[6:12,i]
     if yy2[1]>2000:
@@ -389,7 +414,19 @@ plt.ylabel('z')
 plt.legend()
 plt.title('Plot of x vs z')
 
+
+
+
+
+fig, axs = plt.subplots(3, 1)
+
+# Plot data on the first subplot
+axs[0].plot(teval, sol.y[12])
+axs[0].set_title('Chief yaw angle')
+
+# Plot data on the second subplot
+axs[1].plot(teval, sol.y[13])
+axs[1].set_title('Deputy 1 yaw angle')
+
+
 plt.show()
-
-
-

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import math
-from pyatmos import expo
+# from pyatmos import expo
 
 from Transformations import PQW2ECI,RSW2ECI
 from Perturbations import aspherical_perturbation,atmosphheric_drag
@@ -67,14 +67,22 @@ def car2kep(r,v,mu):
     e_vec = (1/mu) * (numpy.cross(v, h) - mu * (r / r_mag))
     e_mag = numpy.linalg.norm(e_vec)
     
+
+    if numpy.isnan(e_vec).any() or numpy.isnan(N).any():
+        print("Eccentricity is not defined")
+    
+    # print("################",e_vec,e_mag, N, N_mag)
+    # print("################_>>>>",numpy.dot(N / N_mag, e_vec / e_mag))
     # Argument of periapsis (omega)
     if N_mag != 0 and e_mag != 0:
+        the_temp = numpy.min([numpy.max(numpy.dot(N / N_mag, e_vec / e_mag),-1),1])
         omega = numpy.arccos(numpy.dot(N / N_mag, e_vec / e_mag))
         if e_vec[2] < 0:
             omega = 2 * numpy.pi - omega
     else:
         omega = 0
-    
+
+
     # True anomaly (theta)
     if e_mag != 0:
         theta = numpy.arccos(numpy.dot(e_vec / e_mag, r / r_mag))
@@ -711,8 +719,6 @@ def lagrage_J2_diff(t,yy,data):
 
 
 
-    if l > 100:
-        print("ANAMOLY",l)  
 
     e=numpy.sqrt(q1**2 + q2**2)
     h=numpy.sqrt(mu*a*(1-e**2))
