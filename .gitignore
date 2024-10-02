@@ -3,3 +3,15 @@
 ## ignore all inside myvenv and .venv folder
 /myenv/
 /.venv/
+
+# Ignore all .pth files
+*.pth
+*.pkl
+
+# specific files
+temp.txt
+
+# Exclude the helper directory from the ignore rule
+!helper/*.pth
+!helper/*.pkl
+!

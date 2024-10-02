@@ -85,7 +85,7 @@ deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital  elements/ LVLH initial conditions
 # NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
+NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
 ## MAKE SURE TO FOLLOW RIGHT orbital elements order
  
 
@@ -143,9 +143,9 @@ for i in range(N_deputies):
     vd = 0  # Drift per revolution
     
     if i == 0:
-        d = 0.2 # [m] - along track separation (changing for each deputy)
+        d = 1 # [m] - along track separation (changing for each deputy)
     else:
-        d = - 0.2  # [m] - along track separation (changing for each deputy)
+        d = - 1  # [m] - along track separation (changing for each deputy)
     
     rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
     print("RHO_2",rho_2)
@@ -156,7 +156,7 @@ for i in range(N_deputies):
 
 # Define the yaw angles for each spacecraft (chief + N deputies)
 for i in range(N_deputies + 1):
-    yaw_c_d[i] = 0  # Initialize yaw angle (can be customized for each spacecraft)
+    yaw_c_d[i] = i*0.1+0.8  # Initialize yaw angle (can be customized for each spacecraft)
 
 # Initialize the state vectors for each deputy relative to the chief
 yy_o = [Param2NROE(NOE_chief, param, data) for param in deputy_params]
@@ -169,8 +169,8 @@ yy_total = numpy.concatenate((yy_o_flattened, NOE_chief, yaw_c_d))
 mu = data["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # Orbital period
 n_revol_T = 24 * 60 * 60 / Torb  # Number of revolutions per day
-n_revolution = 0.005 * 365 * n_revol_T  # Simulation for 2 years
-T_total = 1#n_revolution * Torb
+n_revolution = 0.05 * 365 * n_revol_T  # Simulation for 2 years
+T_total = n_revolution * Torb
 
 t_span = [0, T_total]
 teval = numpy.linspace(0, T_total, 2000)

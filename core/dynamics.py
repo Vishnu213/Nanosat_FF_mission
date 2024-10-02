@@ -53,7 +53,7 @@ def Dynamics_N(t, yy, data):
     yaw_start = 6 * (N_deputies + 1) 
     chief_state = yy[chief_start_idx:chief_start_idx + 6]
 
-    y_dot_chief,u_c= absolute_NSROE_dynamics(t, chief_state, data,yy)  # Chief dynamics
+    y_dot_chief,u_c= absolute_NSROE_dynamics_N(t, chief_state, data,yy)  # Chief dynamics
 
     y_dot_deputies = []
 
@@ -171,7 +171,7 @@ def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
     rr_1 = numpy.vstack([rr])
     vv_1 = numpy.vstack([vv])   
     u_chief=compute_forces_for_entities(data, loaded_polynomials,yy_o[18:19], vv_1, rr_1)
-    u_chief = numpy.zeros((3))
+    # u_chief = numpy.zeros((3))
     y_dot = A + numpy.matmul(B, u_chief)
 
     return y_dot, u_chief
