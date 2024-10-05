@@ -127,6 +127,7 @@ print("RHO_2",rho_2)
 print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
 parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 
+print("Formation parameters",parameters)
 # Initial relative orbital elements
 RNOE_0=Param2NROE(NOE_chief, parameters,data)
 # RNOE_0[0]=0
@@ -149,7 +150,7 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 # test for gauess equation
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
-n_revol_T = 0.005*365*24*60*60/Torb
+n_revol_T = 0.0005*365*24*60*60/Torb
 n_revolution=  n_revol_T
 T_total=n_revolution*Torb
 

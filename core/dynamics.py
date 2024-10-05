@@ -93,7 +93,7 @@ def Dynamics_N(t, yy, data):
         #print("u_c",u_c)
         # Compute the Lagrange matrix (A) and B-matrix for the deputy
         A_deputy = Lagrange_deri(t, chief_state, data)
-        B_deputy = guess_nonsingular_Bmat(t, chief_state,data, numpy.array(yy[yaw_start],yy[yaw_start+d]))  # Yaw specific to each deputy
+        B_deputy = guess_nonsingular_Bmat(t, chief_state,data, numpy.array(yy[yaw_start])) # ,yy[yaw_start+d] # Yaw specific to each deputy
         #print("A_deputy",A_deputy.shape)
         #print("B_deputy",B_deputy.shape)
         #print("u",u.shape)
@@ -135,7 +135,7 @@ def absolute_NSROE_dynamics(t, yy, param,yy_o):
     # if numpy.isnan(yy).any():
     #     print("inside the abs",yy)
     A = lagrage_J2_diff(t, yy, param)
-    B = guess_nonsingular_Bmat(t, yy, param, yy_o[12:14])
+    B = guess_nonsingular_Bmat(t, yy, param) # , yy_o[12:14]
     #print("B",B)
     #print("A",A)
     #print("inside the abs",yy)
@@ -157,7 +157,7 @@ def absolute_NSROE_dynamics(t, yy, param,yy_o):
 
 def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
     A = lagrage_J2_diff(t, yy, param)
-    B = guess_nonsingular_Bmat(t, yy, param, yy_o[12:14])
+    B = guess_nonsingular_Bmat(t, yy, param) # yy_o[12:14]
     #print("B",B)
     #print("A",A)
     #print("inside the abs",yy)
@@ -211,7 +211,7 @@ def Dynamics(t, yy, param,uu):
     #print("u_c",u_c)
     # Compute the Lagrange matrix (A) and B-matrix for the deputy
     A_deputy = Lagrange_deri(t, chief_state, param)
-    B_deputy = guess_nonsingular_Bmat(t, chief_state, param,yy[12:14])  # Yaw specific to each deputy
+    B_deputy = guess_nonsingular_Bmat(t, chief_state, param) # yy[12:14] # Yaw specific to each deputy
     #print("A_deputy",A_deputy.shape)h
     #print("B_deputy",B_deputy.shape)
     #print("u",u.shape)

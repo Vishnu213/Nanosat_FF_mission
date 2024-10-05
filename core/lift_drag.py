@@ -3,21 +3,12 @@ import pickle
 # from pyatmos import expo
 from scipy.special import erf
 from CL_CD_modified_sentman import  calculate_cd_cl
-from KNN_model import query_knn
 from TwoBP import car2NNSOE, car2NNSOE_density
 from Density_model import model_density, scaler, target_scaler, density_get
 from Transformations import C1, Frenet2LVLH
 
 
 km2m = 1e3  # Conversion factor from kilometers to meters
-
-## Load the density model - Neareast Neighbour Interpolator
-# Loading the saved KDTree and associated data
-with open("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\knn_model.pkl", 'rb') as f:
-    kdtree = pickle.load(f)  # Load the KDTree
-    density_flat = pickle.load(f)  # Load the density values
-    M_flat = pickle.load(f)  # Load the molar mass values
-    T_flat = pickle.load(f)  # Load the temperature values
 
 ## calculate lift and drag forces on a spacecraft
 
@@ -34,11 +25,17 @@ def lookup_surface_properties(angle, poly_coeffs):
         normal_y = np.polyval(coeffs['normal_y'], angle)
         normal_z = np.polyval(coeffs['normal_z'], angle)
         projected_area = np.polyval(coeffs['area'], angle)
+
+
         
         # If the projected area is positive, include the surface in the results
         if projected_area > 0:
             surfaces_data.append([normal_x, normal_y, normal_z, projected_area])
     
+    for surface in surfaces_data:
+        print(surface)
+
+
     return np.array(surfaces_data)
 
 # Function to calculate drag and lift for a given spacecraft

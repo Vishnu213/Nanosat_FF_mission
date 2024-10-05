@@ -238,7 +238,6 @@ def NSROE2car(ROE,param):
         + numpy.sin( u ) * numpy.array([ 0, 1, 0 ]) )
     vp = ( mu / h ) * ( -numpy.sin( u ) * numpy.array([ 1 , 0 , 0 ]) + ( e + numpy.cos( u ) ) * numpy.array([ 0 , 1 , 0 ]) ) ;
 
-
     RR=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(rp))
     VV=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(vp))
 
@@ -555,7 +554,7 @@ def guess_nonsingular(t,yy,param):
     
     return y_dot
 
-def guess_nonsingular_Bmat(t,yy,param,yaw):
+def guess_nonsingular_Bmat(t,yy,param):
    # Guass planetary equations
     # Input, 
     # t - time
