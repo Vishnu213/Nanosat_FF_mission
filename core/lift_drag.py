@@ -26,15 +26,9 @@ def lookup_surface_properties(angle, poly_coeffs):
         normal_z = np.polyval(coeffs['normal_z'], angle)
         projected_area = np.polyval(coeffs['area'], angle)
 
-
-        
         # If the projected area is positive, include the surface in the results
         if projected_area > 0:
             surfaces_data.append([normal_x, normal_y, normal_z, projected_area])
-    
-    for surface in surfaces_data:
-        print(surface)
-
 
     return np.array(surfaces_data)
 

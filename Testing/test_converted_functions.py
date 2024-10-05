@@ -838,7 +838,7 @@ uu = np.zeros((2, 1))
 # Test time
 t = 0.0
 
-# Test function for absolute_NSROE_dynamics
+# # Test function for absolute_NSROE_dynamics
 def test_absolute_NSROE_dynamics():
     # Evaluate the original function
     y_dot_original, u_chief_original = absolute_NSROE_dynamics(t, NOE_chief, data, yy_o)

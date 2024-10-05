@@ -615,44 +615,101 @@ def casadi_polyval(coeffs, x):
 
 
 
+# # # # # # def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
+# # # # # #     surfaces_data = []
+
+# # # # # #     for surface, coeffs in poly_coeffs.items():
+# # # # # #         # Symbolic polynomial evaluation using custom Horner's method
+# # # # # #         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
+# # # # # #         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
+# # # # # #         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
+# # # # # #         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
+
+# # # # # #         # Use CasADi if_else instead of a Python if statement for symbolic comparison
+# # # # # #         condition = projected_area > 0
+
+# # # # # #         # Create a zero vector for the case when the projected area is zero or negative
+# # # # # #         zero_vector = ca.DM.zeros(4)
+
+# # # # # #         # Use `ca.if_else` to either use the valid surface or a zero vector
+# # # # # #         valid_surface = ca.if_else(condition, ca.vertcat(normal_x, normal_y, normal_z, projected_area), zero_vector)
+        
+# # # # # #         surfaces_data.append(valid_surface)
+
+
+# # # # # #     # Concatenate all surfaces symbolically (should be 4xN)
+# # # # # #     surfaces_concat = ca.horzcat(*surfaces_data) if surfaces_data else ca.DM([])
+
+# # # # # #     # Now evaluate the result numerically using CasADi's function evaluation
+# # # # # #     eval_function = ca.Function('eval_surfaces', [angle], [surfaces_concat])
+
+# # # # # #     # Evaluate the result for a specific numeric angle
+# # # # # #     surfaces_concat_evaluated = eval_function(ca.DM(angle_numeric)).full()
+# # # # # #     print(surfaces_concat_evaluated)
+# # # # # #     # Remove columns with all zero values
+# # # # # #     non_zero_columns = surfaces_concat_evaluated[:, ~np.all(surfaces_concat_evaluated == 0, axis=0)]
+# # # # # #     print(non_zero_columns)
+# # # # # #     # Convert back to CasADi DM format
+# # # # # #     non_zero_surfaces_dm = ca.DM(non_zero_columns.transpose())
+# # # # # #     print(non_zero_surfaces_dm)
+# # # # # #     return non_zero_surfaces_dm.T
+
+# Function that takes symbolic inputs and returns constant values
+def constant_value_casadi(value):
+    """
+    Returns a CasADi function that always outputs a constant numeric value,
+    regardless of the symbolic input.
+    """
+    # Create a symbolic placeholder for inputs (won't be used)
+    x = ca.MX.sym('x')
+    
+    # Define a CasADi function that always returns the constant value
+    f = ca.Function('constant_value', [x], [ca.DM(value)])
+    
+    return f
+
+
+
+
+# Main function for looking up surface properties
 def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
     surfaces_data = []
 
+
+
+    # Loop over surfaces and perform symbolic polynomial evaluation
     for surface, coeffs in poly_coeffs.items():
-        # Symbolic polynomial evaluation using custom Horner's method
+        # Perform the symbolic polynomial evaluation
         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
 
-        # Use CasADi if_else instead of a Python if statement for symbolic comparison
-        condition = projected_area > 0
+        # Create a CasADi function to evaluate these polynomials at a numeric angle
+        poly_eval_func = ca.Function('poly_eval', [angle], [normal_x, normal_y, normal_z, projected_area])
 
-        # Create a zero vector for the case when the projected area is zero or negative
-        zero_vector = ca.DM.zeros(4)
+        # Evaluate the CasADi function at the provided numeric angle (angle_numeric)
+        evaluated_normals = poly_eval_func(angle_numeric)
 
-        # Use `ca.if_else` to either use the valid surface or a zero vector
-        valid_surface = ca.if_else(condition, ca.vertcat(normal_x, normal_y, normal_z, projected_area), zero_vector)
-        
-        surfaces_data.append(valid_surface)
+        # Extract evaluated values into NumPy format
+        normal_x_val = evaluated_normals[0].full().item()
+        normal_y_val = evaluated_normals[1].full().item()
+        normal_z_val = evaluated_normals[2].full().item()
+        projected_area_val = evaluated_normals[3].full().item()
 
+        # Check the projected area and filter valid surfaces
+        if projected_area_val > 0:
+            surfaces_data.append([normal_x_val, normal_y_val, normal_z_val, projected_area_val])
 
-    # Concatenate all surfaces symbolically (should be 4xN)
-    surfaces_concat = ca.horzcat(*surfaces_data) if surfaces_data else ca.DM([])
+    # Convert the surfaces data to a NumPy array
+    surfaces_np = np.array(surfaces_data)
 
-    # Now evaluate the result numerically using CasADi's function evaluation
-    eval_function = ca.Function('eval_surfaces', [angle], [surfaces_concat])
+    non_zero_surfaces_dm = ca.DM(surfaces_data)  # No need to transpose back
+    non_zero_surfaces_dm = ca.transpose(non_zero_surfaces_dm)  # Correct CasADi transpose
 
-    # Evaluate the result for a specific numeric angle
-    surfaces_concat_evaluated = eval_function(ca.DM(angle_numeric)).full()
-    print(surfaces_concat_evaluated)
-    # Remove columns with all zero values
-    non_zero_columns = surfaces_concat_evaluated[:, ~np.all(surfaces_concat_evaluated == 0, axis=0)]
-    print(non_zero_columns)
-    # Convert back to CasADi DM format
-    non_zero_surfaces_dm = ca.DM(non_zero_columns.transpose())
-    print(non_zero_surfaces_dm)
-    return non_zero_surfaces_dm.T
+    
+    return non_zero_surfaces_dm
+
 
 
 def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, data, AOA):
@@ -795,10 +852,25 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
 
         print("vvsdsdsd",vv.shape)
         print(rr.shape)
+        v1 = vv[i,:]
+        r1 = rr[i,:]
+        # v1=ca.reshape(v1,3,1)
+        # r1=ca.reshape(r1,3,1)
+        print(vv.shape[0]==2, vv.shape[0]==3)
+        if vv.shape[0] == 3:
+            v_rel = vv 
+            r = rr
+            print("v_rel:",v_rel.shape)
+        else:
+            v_rel=ca.reshape(v1,3,1)
+            r=ca.reshape(r1,3,1)
 
-        # Use CasADi logic to reshape vectors to 3x1 if they are not in that shape
-        v_rel = ca.if_else(vv.shape[0] == 3, vv, ca.reshape(vv[:,i], 3, 1))
-        r = ca.if_else(rr.shape[0] == 3, rr, ca.reshape(rr[:,i], 3, 1))
+        # print(v1.shape)
+        # print(r1.shape)
+        # print(vv.shape[0]==2)
+        # # Use CasADi logic to reshape vectors to 3x1 if they are not in that shape
+        # v_rel = ca.if_else(vv.shape[0] == 3, vv,v1)
+        # r = ca.if_else(rr.shape[0] == 3, rr, r1)
 
         print(v_rel.shape)
         print(r.shape)

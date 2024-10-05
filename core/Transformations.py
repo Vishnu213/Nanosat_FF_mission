@@ -101,7 +101,6 @@ def Frenetframe(rr,vv):
 def Frenet2LVLH(rr,vv):
     RR_Frenet=Frenetframe(rr,vv)
     RR_LVLH = LVLHframe(rr,vv)
-    print("HJGHJADGAGHSGHDGASDGH",rr,vv)
     Rot_F2LVLH = numpy.matmul(RR_LVLH.transpose(),RR_Frenet)
     return Rot_F2LVLH
 
