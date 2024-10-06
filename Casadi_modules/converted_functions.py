@@ -2,7 +2,10 @@ import casadi as ca
 import numpy as np
 import pickle
 
+
 from density_model_ca import density_get_casadi
+
+
 
 def M2theta_casadi(M, e, tol=1e-10, max_iter=20):
     # Ensure e is within valid range
@@ -293,22 +296,15 @@ def Param2NROE_casadi(NOE, parameters, data):
 import casadi as ca
 
 def lagrange_J2_diff_casadi(t, yy, data):
-    """
-    Convert the lagrange_J2_diff() to CasADi for symbolic computation.
+    # CasADi symbolic variables
+    f_dot = ca.MX.zeros(6)
     
-    Inputs:
-        t: Time variable (CasADi SX)
-        yy: State vector (CasADi SX)
-        data: Dictionary containing constants (mu, Re, J2, etc.)
-    
-    Returns:
-        f_dot: CasADi SX vector of computed dynamics
-    """
+    # Extract data
     mu = data["Primary"][0]
     Re = data["Primary"][1]
     J2 = data["J"][0]
 
-    # Assign the state variables
+    # Assigning the state variables
     a = yy[0]
     l = yy[1]
     i = yy[2]
@@ -316,23 +312,47 @@ def lagrange_J2_diff_casadi(t, yy, data):
     q2 = yy[4]
     OM = yy[5]
 
+    # Calculations
     e = ca.sqrt(q1**2 + q2**2)
     h = ca.sqrt(mu * a * (1 - e**2))
-    p = (h**2) / mu
+    eta = 1 - q1**2 - q2**2
+    n = ca.sqrt(mu / (a**3))
+    term1 = (h**2) / mu
     eta = ca.sqrt(1 - q1**2 - q2**2)
+    p = term1
+    # # Handle the condition e == 0 using CasADi's conditional functions
+    # e_zero = ca.fabs(e) < 1e-8  # Define a small threshold
 
-    # Components computation
+    # Check if e is approximately zero
+    e_zero = ca.fabs(ca.sqrt(q1**2 + q2**2)) < 1e-8
+
+    # Precompute the expressions for both branches
+    omega_peri = ca.if_else(e_zero, 0, ca.acos(q1 / e))
+    mean_anomaly = l - omega_peri
+    theta = M2theta_casadi(mean_anomaly, e)
+    u_false = theta + omega_peri  # What to do if e != 0
+
+    # Now pass these precomputed expressions to if_else
+    u = ca.if_else(e_zero, l, u_false)
+
+
+
+    # Compute r
+    r = (a * eta**2) / (1 + q1 * ca.cos(u) + q2 * ca.sin(u))
+
+
+
+    # Compute each component symbolically
     component_1 = 0
-    n = ca.sqrt(mu / a**3)  # Added this line to compute n
     component_2 = n + ((3/4) * J2 * (Re / p)**2 * n) * (eta * (3 * ca.cos(i)**2 - 1) + (5 * ca.cos(i)**2 - 1))
     component_3 = 0
-    component_4 = -(3/4) * J2 * (Re / p)**2 * n * (3 * ca.cos(i)**2 - 1) * q2
+    component_4 = - (3/4) * J2 * (Re / p)**2 * n * (3 * ca.cos(i)**2 - 1) * q2
     component_5 = (3/4) * J2 * (Re / p)**2 * n * (3 * ca.cos(i)**2 - 1) * q1
-    component_6 = -(3/2) * J2 * (Re / p)**2 * n * ca.cos(i)
+    component_6 = - (3/2) * J2 * (Re / p)**2 * n * ca.cos(i)
 
-    # Combine into CasADi vector
+    # Combine components into a vector
     f_dot = ca.vertcat(component_1, component_2, component_3, component_4, component_5, component_6)
-
+    
     return f_dot
 
 # Rotation Matrices
@@ -548,7 +568,6 @@ def load_polynomials(filename='polynomials.pkl'):
         return pickle.load(f)
 
 
-loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
 
 
 
@@ -693,11 +712,11 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
     for surface, coeffs in poly_coeffs.items():
         print(f"\nProcessing surface: {surface}")
         
-        # Evaluate polynomials symbolically using CasADi
-        normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
-        normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
-        normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
-        projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
+        # Manually evaluate polynomials symbolically using CasADi for each component
+        normal_x = sum(c * angle**i for i, c in enumerate(reversed(coeffs['normal_x'])))
+        normal_y = sum(c * angle**i for i, c in enumerate(reversed(coeffs['normal_y'])))
+        normal_z = sum(c * angle**i for i, c in enumerate(reversed(coeffs['normal_z'])))
+        projected_area = sum(c * angle**i for i, c in enumerate(reversed(coeffs['area'])))
 
         print(f"normal_x: {normal_x}, normal_y: {normal_y}, normal_z: {normal_z}, projected_area: {projected_area}")
 
@@ -995,6 +1014,8 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
 
 
 ########### Dynamics modules ####################
+loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
+
 
 import casadi as ca
 
@@ -1177,11 +1198,117 @@ def absolute_NSROE_dynamics_casadi(t, yy, param, yy_o):
     # Compute forces for the chief using CasADi version
     u_chief = compute_forces_for_entities_casadi(data, loaded_polynomials, yy_o[12:13], vv_1, rr_1)
 
-    # Scale the chief force output
-    u_chief_scale = u_chief * 1e12
-
     # Compute the derivative y_dot
     y_dot = A + ca.mtimes(B, u_chief)
 
     return y_dot, u_chief
 
+import casadi as ca
+
+def Dynamics_casadi(t, yy, param, uu):
+    start_idx = 0
+    chief_state = yy[6:12]
+
+    # assert ca.is_finite(yy), "Invalid value in state vector"
+    # assert ca.is_finite(uu), "Invalid value in control input"
+    
+    # Use the CasADi function for absolute NSROE dynamics
+    y_dot_chief, u_c = absolute_NSROE_dynamics_casadi(t, chief_state, param, yy)
+
+    # Get the relative orbital elements of the deputy
+    delta_NSROE = yy[start_idx:start_idx + 6]  # Relative orbital elements of deputy
+    
+    # Calculate the absolute orbital elements by summing the deltas with the chief NSROE
+    deputy_NSOE = chief_state + delta_NSROE
+
+    # Convert NSROE to Cartesian coordinates for the deputy
+    rr_deputy, vv_deputy = NSROE2car_casadi(deputy_NSOE, param)
+
+    # Prepare data for each deputy
+    satellite_key = f"deputy_1"
+    satellite_properties = param["satellites"][satellite_key]
+    data_deputy = {}
+    data_deputy['Primary'] = param['Primary']
+    data_deputy['S/C'] = [satellite_properties["mass"], satellite_properties["area"]]
+
+    # Compute forces for the deputy
+    u_deputy = compute_forces_for_entities_casadi(data_deputy, loaded_polynomials, yy[13], vv_deputy, rr_deputy)
+
+    # Calculate the differential aerodynamic forces
+    u = u_deputy - u_c
+
+    # Compute the Lagrange matrix (A) and B-matrix for the deputy
+    A_deputy = Lagrange_deri_casadi(t, chief_state, param)
+    B_deputy = guess_nonsingular_Bmat_casadi(t, chief_state, param)
+
+    # Compute the relative dynamics of the deputy
+    y_dot_deputy = ca.mtimes(A_deputy, delta_NSROE) + ca.mtimes(B_deputy, u / 1e12)
+
+    # Compute the yaw dynamics
+    y_dot_yaw = yaw_dynamics_casadi(t, yy[12:14], param, uu)
+
+    # Concatenate the results to form the full state derivative vector
+    y = ca.vertcat(y_dot_deputy, y_dot_chief, y_dot_yaw)
+
+    return y
+
+
+import casadi as ca
+
+def NSROE2LVLH_casadi(NSROE, NSOE0, data):
+
+    # Extract data parameters
+    mu = data["Primary"][0]
+    J2 = data["J"][0]
+
+    # State variables from NSOE0
+    a = NSOE0[0]
+    l = NSOE0[1]
+    i = NSOE0[2]
+    q1 = NSOE0[3]
+    q2 = NSOE0[4]
+    OM = NSOE0[5]
+
+    # Delta variables from NSROE
+    delta_a = NSROE[0]
+    delta_lambda0 = NSROE[1]
+    delta_i = NSROE[2]
+    delta_q1 = NSROE[3]
+    delta_q2 = NSROE[4]
+    delta_Omega = NSROE[5]
+
+    e = ca.sqrt(q1**2 + q2**2)
+    h = ca.sqrt(mu * a * (1 - e**2))
+    eta = ca.sqrt(1 - q1**2 - q2**2)
+    p = (h**2) / mu
+    rp = a * (1 - e)
+    n = ca.sqrt(mu / (a**3))
+
+    # Calculate u and r based on whether e is zero or not
+    u = ca.if_else(e == 0, l, 0)  # If eccentricity is zero, use l as u
+    omega_peri = ca.if_else(e == 0, 0, ca.acos(q1 / e))
+    mean_anamoly = l - omega_peri
+    theta_tuple = M2theta_casadi(mean_anamoly, e, 1e-8)
+    theta = theta_tuple[0]
+    u = ca.if_else(e == 0, u, theta + omega_peri)  # If eccentricity is not zero, use theta + omega_peri
+    r = (a * eta**2) / (1 + (q1 * ca.cos(u)) + (q2 * ca.sin(u)))
+
+    e1 = (a / eta) * ca.sqrt((1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
+                      - ((q1 * delta_q1 + q2 * delta_q2)**2) + delta_q1**2 + delta_q2**2)
+
+    e2 = p * (delta_Omega * ca.cos(i) + ((1 + eta + eta**2) / (eta**3 * (1 + eta))) * (q2 * delta_q1 - q1 * delta_q2)
+              + (1 / eta**3) * delta_lambda0)
+
+    e3 = p * ca.sqrt(delta_i**2 + delta_Omega**2 * ca.sin(i)**2)
+
+    alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
+    alpha_denominator = (1 + eta) * (delta_q2 - q1 * delta_lambda0) - q2 * (q1 * delta_q1 + q2 * delta_q2)
+    alpha_0 = ca.atan2(alpha_numerator, alpha_denominator)
+
+    beta_0 = ca.atan2(-delta_Omega * ca.sin(i), delta_i)
+
+    x_p = (e1 / p) * ca.sin(u + alpha_0) * (1 + q1 * ca.cos(u) + q2 * ca.sin(u))
+    y_p = (e1 / p) * ca.cos(u + alpha_0) * (2 + q1 * ca.cos(u) + q2 * ca.sin(u)) + (e2 / p)
+    z_p = (e3 / p) * ca.sin(u + beta_0)
+
+    return r * ca.vertcat(x_p, y_p, z_p)

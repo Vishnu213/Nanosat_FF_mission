@@ -34,7 +34,7 @@
 #     print(f"CasADi theta: {theta_casadi_value}")
     
 #     # Check if the results are close within a specified tolerance
-#     tolerance = 1e-6
+#     #  tolerance = 1e-6
 #     if np.isclose(theta_original, theta_casadi_value, atol=tolerance):
 #         print("Test Passed: The results match within the acceptable tolerance.")
 #     else:
@@ -51,6 +51,7 @@ import os
 import sys
 import pickle
 import pytest
+from pytest import approx
 
 
 
@@ -125,6 +126,7 @@ from lift_drag import compute_forces_for_entities  # Python version
 from dynamics import absolute_NSROE_dynamics
 from converted_functions import absolute_NSROE_dynamics_casadi
 
+tolerance = 1e-11
 
 def test_M2theta():
     M_test = 0.75
@@ -178,7 +180,7 @@ def test_PQW2ECI_casadi():
     print(f"CasADi PQW to ECI Matrix: \n{PQW2ECI_matrix_casadi_value}")
 
     # Check if the results are close within a specified tolerance
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(PQW2ECI_matrix_original, PQW2ECI_matrix_casadi_value, atol=tolerance), \
         f"Original={PQW2ECI_matrix_original}, CasADi={PQW2ECI_matrix_casadi_value}"
 
@@ -215,7 +217,7 @@ def test_NSROE2car_casadi():
     print(f"CasADi VV: {VV_casadi_value}")
 
     # Check if the results are close within a specified tolerance
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(RR_original, RR_casadi_value, atol=tolerance), \
         f"RR_original={RR_original}, RR_casadi={RR_casadi_value}"
     assert np.allclose(VV_original, VV_casadi_value, atol=tolerance), \
@@ -256,7 +258,7 @@ def test_calculate_cd_cl_casadi():
     Cl_casadi_value = Cl_casadi_value.full().item()
 
     # Check if the results are close within a specified tolerance
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.isclose(Cd_original, Cd_casadi_value, atol=tolerance), \
         f"Cd_original={Cd_original}, Cd_casadi={Cd_casadi_value}"
     assert np.isclose(Cl_original, Cl_casadi_value, atol=tolerance), \
@@ -292,7 +294,7 @@ def test_car2kep_casadi():
     print(f"CasADi COE_mag: {COE_casadi_value_mag}")
     
     # Assert they are close within tolerance
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(COE_original_vec, COE_casadi_value_vec, atol=tolerance), \
         f"COE_vec mismatch: {COE_original_vec} vs {COE_casadi_value_vec}"
     assert np.allclose(COE_original_mag, COE_casadi_value_mag, atol=tolerance), \
@@ -331,7 +333,7 @@ def test_kep2car_casadi():
     print(f"CasADi VV: {VV_casadi_value}")
     
     # Assert they are close within tolerance
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(RR_original, RR_casadi_value, atol=tolerance), \
         f"RR mismatch: {RR_original} vs {RR_casadi_value}"
     assert np.allclose(VV_original, VV_casadi_value, atol=tolerance), \
@@ -367,47 +369,54 @@ def test_Param2NROE_casadi():
     casadi_result_numpy = casadi_result.full().flatten()
 
     # Check if the CasADi result matches the original result
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(original_result, casadi_result_numpy, atol=tolerance), \
         f"Original result: {original_result}, CasADi result: {casadi_result_numpy}"
 
     # Check if the CasADi result matches the original result
-    tolerance = 1e-6
+    #  tolerance = 1e-6
     assert np.allclose(original_result, casadi_result_numpy, atol=tolerance), \
         f"Original result: {original_result}, CasADi result: {casadi_result_numpy}"
 
     print("Test passed!")
 
 
+# Test function for lagrange_J2_diff_casadi
 def test_lagrange_J2_diff_casadi():
-    # Test input values
-    yy_test = np.array([6.49992613e+03, 5.59773493e-01, 1.10741825e+00, 5.00055243e-01, 1.99846501e-01, 4.72620248e+00])
-    t_test = 381.7395  # Time value
-    data_test = {
-        "Primary": [3.98600433e5, 6378.16, 7.2921150e-5],  # mu, radius, rotation rate
-        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
+    # Define test parameters
+    t = 0.0  # Example test time value
+    yy = [7000, 0.1, 0.785398, 0.1, 0.05, 0.2]  # Example test state vector
+    data = {
+        "Primary": [398600.4418, 6378.137, 7.2921150e-5],
+        "J": [1.08262668e-3, 0, 0],
+        "S/C": [300, 2, 0.9, 300]  # Additional data (optional, not used)
     }
-    
-    # Original function result (using NumPy for reference)
-    f_dot_original = lagrage_J2_diff(t_test, yy_test, data_test)
-    
-    # CasADi symbolic representation for yy
-    yy_sym = ca.SX.sym('yy', 6)
-    
-    # CasADi function result
-    f_dot_casadi_sym = lagrange_J2_diff_casadi(t_test, yy_sym, data_test)
-    lagrange_J2_diff_casadi_func = ca.Function('lagrange_J2_diff_casadi_func', [yy_sym], [f_dot_casadi_sym])
-    f_dot_casadi = lagrange_J2_diff_casadi_func(yy_test)
 
-    # Flatten and compare results
-    f_dot_casadi_value = f_dot_casadi.full().flatten()
+    # Call the original Python function
+    f_dot_original = lagrage_J2_diff(t, yy, data)
 
-    # Check if the results are close within a specified tolerance
-    tolerance = 1e-6
-    assert np.allclose(f_dot_original, f_dot_casadi_value, atol=tolerance), \
-        f"f_dot_original={f_dot_original}, f_dot_casadi={f_dot_casadi_value}"
+    # Define CasADi symbolic variables
+    t_sym = ca.MX.sym('t')  # Symbolic time variable
+    yy_sym = ca.MX.sym('yy', 6)  # A 6-element symbolic vector for yy
 
-    print("Test passed!")
+    # Call the CasADi function with symbolic input
+    f_dot_casadi = lagrange_J2_diff_casadi(t_sym, yy_sym, data)
+
+    # Create a CasADi function for evaluation
+    f_dot_func = ca.Function('f_dot_func', [t_sym, yy_sym], [f_dot_casadi])
+
+    # Evaluate the CasADi function at the test values of t and yy
+    f_dot_casadi_eval = f_dot_func(t, yy).full().flatten()
+    print(f"Original f_dot: {f_dot_original}")
+    print(f"CasADi f_dot: {f_dot_casadi_eval}")
+    # Shape test
+    assert f_dot_casadi_eval.shape[0] == f_dot_original.shape[0], (
+        f"Expected shape {f_dot_original.shape}, "
+        f"but got {f_dot_casadi_eval.shape}"
+    )
+
+    # Value test: Check that both functions return similar results
+    np.testing.assert_allclose(f_dot_casadi_eval, f_dot_original, rtol=1e-5, atol=tolerance)
 
 
 def test_rotation_matrices_casadi():
@@ -578,7 +587,7 @@ def test_lookup_surface_properties_casadi():
         f"Shapes differ between Python and CasADi. Python shape: {numpy_results.shape}, CasADi shape: {filtered_array.shape}"
 
     # Compare the values using np.allclose with a tolerance
-    assert np.allclose(numpy_results, filtered_array, atol=1e-6), \
+    assert np.allclose(numpy_results, filtered_array, atol=tolerance), \
         f"Results differ between Python and CasADi. Python: {numpy_results}, CasADi: {filtered_array}"
 
     # If the code reaches here, both shape and values are equal
@@ -654,8 +663,8 @@ def test_calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data
     assert python_lift.shape == casadi_lift_np.shape, f"Lift shape mismatch! Python: {python_lift.shape}, CasADi: {casadi_lift_np.shape}"
 
     # Compare Python and CasADi results
-    assert np.allclose(python_drag, casadi_drag_np, atol=1e-6), f"Drag results differ! Python: {python_drag}, CasADi: {casadi_drag_np}"
-    assert np.allclose(python_lift, casadi_lift_np, atol=1e-6), f"Lift results differ! Python: {python_lift}, CasADi: {casadi_lift_np}"
+    assert np.allclose(python_drag, casadi_drag_np, atol=tolerance), f"Drag results differ! Python: {python_drag}, CasADi: {casadi_drag_np}"
+    assert np.allclose(python_lift, casadi_lift_np, atol=tolerance), f"Lift results differ! Python: {python_lift}, CasADi: {casadi_lift_np}"
 
 def get_test_data_compute():
     # Define the input data for the test
@@ -713,8 +722,8 @@ def test_compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr
     assert python_lift.shape == casadi_lift_np.shape, f"Lift shape mismatch! Python: {python_lift.shape}, CasADi: {casadi_lift_np.shape}"
 
     # Value checks (tolerance of 1e-6 for small differences)
-    assert np.allclose(python_drag, casadi_drag_np, atol=1e-6), f"Drag values mismatch! Python: {python_drag}, CasADi: {casadi_drag_np}"
-    assert np.allclose(python_lift, casadi_lift_np, atol=1e-6), f"Lift values mismatch! Python: {python_lift}, CasADi: {casadi_lift_np}"
+    assert np.allclose(python_drag, casadi_drag_np, atol=tolerance), f"Drag values mismatch! Python: {python_drag}, CasADi: {casadi_drag_np}"
+    assert np.allclose(python_lift, casadi_lift_np, atol=tolerance), f"Lift values mismatch! Python: {python_lift}, CasADi: {casadi_lift_np}"
 
 def get_test_data_multiple_entities():
     # Load the polynomial coefficients from a saved file
@@ -782,7 +791,7 @@ def test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, r
     assert forces_python.shape[0] == forces_casadi_np.shape[0], f"Drag shape mismatch! Python: {forces_python.shape}, CasADi: {forces_casadi_np.shape}"
 
     # Check the values using np.allclose with a tolerance
-    assert np.allclose(forces_python, forces_casadi_np, atol=1e-6), \
+    assert np.allclose(forces_python, forces_casadi_np, atol=tolerance), \
         f"Force mismatch! Python: {forces_python}, CasADi: {forces_casadi_np}"
 
     print("Test passed: Python and CasADi outputs match in both shape and values.")
@@ -858,7 +867,6 @@ def test_lagrange_deri_casadi():
     A_mat_casadi = Lagrange_deri_casadi(t_sym, yy_sym, param)
 
     # Create a CasADi function for evaluation with the constant parameters
-    # Here, param is passed as constants (non-symbolic) inside the CasADi function
     A_func = ca.Function('A_func', [t_sym, yy_sym], [A_mat_casadi])
 
     # Evaluate the CasADi function at the test values of t and yy
@@ -871,7 +879,9 @@ def test_lagrange_deri_casadi():
     )
 
     # Value test: Check that both functions return similar results
-    np.testing.assert_allclose(A_mat_casadi_eval, A_mat_original, rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(A_mat_casadi_eval, A_mat_original, rtol=1e-5, atol=tolerance)
+
+    print(f"Lagrange derivative CasADi and Python output shapes: {A_mat_casadi_eval.shape}")
 
 
 def test_guess_nonsingular_Bmat_casadi():
@@ -906,72 +916,201 @@ def test_guess_nonsingular_Bmat_casadi():
     )
 
     # Value test: Check that both functions return similar results
-    np.testing.assert_allclose(B_mat_casadi_eval, B_mat_original, rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(B_mat_casadi_eval, B_mat_original, rtol=1e-5, atol=tolerance)
 
+    print(f"Nonsingular B-matrix CasADi and Python output shapes: {B_mat_casadi_eval.shape}")
 
 ############# Absolute NSROE dynamics test #############
 
-# Test parameters from the reference script
-data = {
-    "Primary": [3.98600433e5, 6378.16, 7.2921150e-5],
-    "J": [0.1082626925638815e-2, 0, 0],
-    "satellites": {
-        "chief": {"mass": 300, "area": 2, "C_D": 0.9},
-        "deputy_1": {"mass": 250, "area": 1.8, "C_D": 0.85}
-    },
-    "N_deputies": 2,
-    "sat": [1.2, 1.2, 1.2],
-    "Init": [0.05, 0.2, 0]
-}
 
-# Initial conditions for NOE_chief and yy_o from the reference script
-deg2rad = np.pi / 180
-NOE_chief = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
-yaw_c_d = np.array([0.12, 0.08])
-RNOE_0 = Param2NROE(NOE_chief, np.array([0, 0, 0, 0, 0, 0]), data)
-yy_o = np.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
-# Load the polynomial data for aerodynamic calculations
-loaded_polynomials = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl')
+# # Test function for absolute_NSROE_dynamics
+def test_absolute_NSROE_dynamics():
+    # Evaluate the original function
+# Parameters that is of interest to the problem
 
-# Placeholder for control inputs
-uu = np.zeros((2, 1))
+    data = {
+        "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
 
-# Test time
-t = 0.0
+        # Satellites data including chief and deputies
+        "satellites": {
+            "chief": {
+                "mass": 300,         # Mass in kg
+                "area": 2,           # Cross-sectional area in m^2
+                "C_D": 0.9,          # Drag coefficient
+            },
+            "deputy_1": {
+                "mass": 250,
+                "area": 1.8,
+                "C_D": 0.85,
+            }
+        },
+        "N_deputies": 2,  # Number of deputies
+        "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
 
-# # # Test function for absolute_NSROE_dynamics
-# def test_absolute_NSROE_dynamics():
-#     # Evaluate the original function
-#     y_dot_original, u_chief_original = absolute_NSROE_dynamics(t, NOE_chief, data, yy_o)
+    }
 
-#     # Convert the state and parameters into CasADi symbolic variables
-#     t_sym = ca.MX.sym('t')
-#     yy_sym = ca.MX.sym('yy', 6)
-#     yy_o_sym = ca.MX.sym('yy_o', 14)
+    # Initial conditions for NOE_chief and yy_o from the reference script
+    deg2rad = np.pi / 180
+    NOE_chief = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
+    yaw_c_d = np.array([0.12, 0.08])
+    RNOE_0 = Param2NROE(NOE_chief, np.array([0, 0, 0, 0, 0, 0]), data)
+    yy_o = np.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
-#     # Call the CasADi version of the function
-#     y_dot_casadi, u_chief_casadi = absolute_NSROE_dynamics_casadi(t_sym, yy_sym, data, yy_o_sym)
+    # Load the polynomial data for aerodynamic calculations
+    loaded_polynomials = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl')
 
-#     # Create CasADi functions for evaluation
-#     abs_NSROE_func = ca.Function('abs_NSROE_func', [t_sym, yy_sym, yy_o_sym], [y_dot_casadi, u_chief_casadi])
+    # Placeholder for control inputs
+    uu = np.zeros((2, 1))
 
-#     # Evaluate CasADi function at the test values
-#     y_dot_casadi_eval, u_chief_casadi_eval = abs_NSROE_func(t, NOE_chief, yy_o)
+    # Test time
+    t = 0.0
 
-#     # Shape test
-#     assert y_dot_casadi_eval.shape == y_dot_original.shape, (
-#         f"Expected shape {y_dot_original.shape}, but got {y_dot_casadi_eval.shape}"
-#     )
-#     assert u_chief_casadi_eval.shape == u_chief_original.shape, (
-#         f"Expected shape {u_chief_original.shape}, but got {u_chief_casadi_eval.shape}"
-#     )
 
-#     # Value test: Check that both functions return similar results
-#     np.testing.assert_allclose(y_dot_casadi_eval, y_dot_original, rtol=1e-5, atol=1e-8)
-#     np.testing.assert_allclose(u_chief_casadi_eval, u_chief_original, rtol=1e-5, atol=1e-8)
+    y_dot_original, u_chief_original = absolute_NSROE_dynamics(t, NOE_chief, data, yy_o)
+
+    # Convert the state and parameters into CasADi symbolic variables
+    t_sym = ca.MX.sym('t')
+    yy_sym = ca.MX.sym('yy', NOE_chief.shape[0])
+    yy_o_sym = ca.MX.sym('yy_o', yy_o.shape[0])
+
+    # Call the CasADi version of the function
+    y_dot_casadi, u_chief_casadi = absolute_NSROE_dynamics_casadi(t_sym, yy_sym, data, yy_o_sym)
+
+    # Create CasADi functions for evaluation
+    abs_NSROE_func = ca.Function('abs_NSROE_func', [t_sym, yy_sym, yy_o_sym], [y_dot_casadi, u_chief_casadi])
+
+    # Evaluate CasADi function at the test values
+    y_dot_casadi_eval, u_chief_casadi_eval = abs_NSROE_func(t, NOE_chief, yy_o)
+
+    # Shape test
+    assert y_dot_casadi_eval.shape[0] == y_dot_original.shape[0], (
+        f"Expected shape {y_dot_original.shape}, but got {y_dot_casadi_eval.shape}"
+    )
+    assert u_chief_casadi_eval.shape[0] == u_chief_original.shape[0], (
+        f"Expected shape {u_chief_original.shape}, but got {u_chief_casadi_eval.shape}"
+    )
+
+    print(f"Absolute NSROE dynamics CasADi and Python output shapes: {y_dot_casadi_eval.shape} and {u_chief_casadi_eval.shape}")
+    print("Python y_dot:", y_dot_original)
+    print("CasADi y_dot:", y_dot_casadi_eval)
+    print("Python u_chief:", u_chief_original)
+    print("CasADi u_chief:", u_chief_casadi_eval)
+    # Value test: Check that both functions return similar results
+    np.testing.assert_allclose(y_dot_casadi_eval, y_dot_original, rtol=1e-5, atol=tolerance)
+    np.testing.assert_allclose(u_chief_casadi_eval, u_chief_original, rtol=1e-5, atol=tolerance)
+
+
+from dynamics import Dynamics  # Make sure the import path is correct
+from converted_functions import Dynamics_casadi  # Make sure the import path is correct
+
+# Test function for Dynamics_casadi
+def test_Dynamics_casadi():
+
+# Parameters that is of interest to the problem
+
+    param = {
+        "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
+
+        # Satellites data including chief and deputies
+        "satellites": {
+            "chief": {
+                "mass": 300,         # Mass in kg
+                "area": 2,           # Cross-sectional area in m^2
+                "C_D": 0.9,          # Drag coefficient
+            },
+            "deputy_1": {
+                "mass": 250,
+                "area": 1.8,
+                "C_D": 0.85,
+            }
+        },
+        "N_deputies": 2,  # Number of deputies
+        "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
+
+    }
+
+    # Initial conditions for NOE_chief and yy_o from the reference script
+    deg2rad = np.pi / 180
+    NOE_chief = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
+    yaw_c_d = np.array([0.12, 0.08])
+    RNOE_0 = Param2NROE(NOE_chief, np.array([0, 0, 0, 0, 0, 0]), param)
+    yy = np.concatenate((RNOE_0, NOE_chief, yaw_c_d))
+
+    # Load the polynomial data for aerodynamic calculations
+    loaded_polynomials = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl')
+
+    # Placeholder for control inputs
+    uu = np.zeros((2, 1))
+
+    # Test time
+    t = 0.0
+
+    param["Init"] = [NOE_chief[4],NOE_chief[3], 0]  # Initial parameters for q1, q2, and t0
+
+
+    # Call the original Python Dynamics function
+    y_python = Dynamics(t, yy, param, uu)
+
+    # Convert the inputs to CasADi symbolic variables
+    t_sym = ca.MX.sym('t')
+    yy_sym = ca.MX.sym('yy', len(yy))
+    uu_sym = ca.MX.sym('uu', len(uu))
+
+
+    # Call the CasADi function for Dynamics
+    dynamics_casadi_sym = Dynamics_casadi(t_sym, yy_sym, param, uu_sym)
+    dynamics_func = ca.Function('dynamics_func', [t_sym, yy_sym, uu_sym], [dynamics_casadi_sym])
+
+    # Evaluate the CasADi function with numeric inputs
+    dynamics_casadi_result = dynamics_func(t, yy, uu)
+
+    # Convert CasADi result to NumPy array for comparison
+    y_casadi = np.array(dynamics_casadi_result.full()).flatten()
+
+    # Now test the result for expected behavior (compare with original Python version or numerical expectations)
+    # Since this is a placeholder, you can assert for shape, or specific known expected values.
+    
+    # Compare the Python and CasADi results
+    assert y_python.shape == y_casadi.shape, f"Shape mismatch: Python {y_python.shape}, CasADi {y_casadi.shape}"
+    assert np.allclose(y_python, y_casadi, atol=tolerance), f"Values mismatch: Python {y_python}, CasADi {y_casadi}"
+
+from TwoBP import NSROE2LVLH  # Make sure the import path is correct
+from converted_functions import NSROE2LVLH_casadi  # Make sure the import path is correct
+
+def test_NSROE2LVLH_casadi():
+    # Test inputs
+    NSROE_test = np.array([7000, 0.1, np.deg2rad(45), 0.01, 0.02, np.deg2rad(30)])
+    NSOE0_test = np.array([6800, 0.01, np.deg2rad(30), 0.01, 0.02, np.deg2rad(45)])
+    data_test = {
+        "Primary": [398600.4418, 6378.137, 7.2921150e-5],
+        "J": [1.08262668e-3, 0, 0],
+        "S/C": [300, 2, 0.9, 300]
+    }
+
+    # Original function result
+    rr_np = NSROE2LVLH(NSROE_test, NSOE0_test, data_test)
+
+    # CasADi function result
+    NSROE_sym = ca.SX.sym('NSROE', 6)
+    NSOE0_sym = ca.SX.sym('NSOE0', 6)
+    rr_casadi_sym = NSROE2LVLH_casadi(NSROE_sym, NSOE0_sym, data_test)
+
+    # Create a CasADi function
+    rr_casadi_func = ca.Function('rr_casadi_func', [NSROE_sym, NSOE0_sym], [rr_casadi_sym])
+
+    # Evaluate the CasADi function with numeric values
+    rr_casadi = rr_casadi_func(NSROE_test, NSOE0_test).full().flatten()
+    print("Python result:", rr_np)
+    print("CasADi result:", rr_casadi)
+    # Compare the results
+    assert rr_casadi == approx(rr_np, abs=1e-11), f"NumPy: {rr_np}, CasADi: {rr_casadi}"
 
 if __name__ == "__main__":
-    v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
-    test_calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA)
+    # data, loaded_polynomials, alpha_list, vv, rr=get_test_data_multiple_entities()
+    # # v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
+    # test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
 
+    test_Dynamics_casadi()

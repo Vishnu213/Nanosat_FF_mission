@@ -1,70 +1,64 @@
-"""
-Nanosat Formation Flying Project
-
-Relative dynamics of two nanosatellites are defined here with J2 perturbation. Taken from paper: 
-A planning tool for optimal three-dimensional formation flight maneuvers of satellites in VLEO using aerodynamic lift and drag via yaw angle deviations  
-Traub, C., Fasoulas, S., and Herdrich, G. (2022). 
-
-Author:
-    Vishnuvardhan Shakthibala 
-    
-"""
-## Copy the following lines of code 
-# FROM HERE
+import casadi as ca
 import numpy
-from scipy import integrate
 import matplotlib.pyplot as plt
+import time
 import os
 import sys
-import math
+import pickle
+import pytest
+
+
+
+# Add the folder containing your modules to the Python path
+path_core = "..\\core"
+path_casadi_converter = "..\\Casadi_modules"
+
+# Get absolute paths
+module_path_core = os.path.abspath(path_core)
+module_path_casadi_converter = os.path.abspath(path_casadi_converter)
+
+# Check if the paths are not already in sys.path and add them
+if module_path_core not in sys.path:
+    sys.path.append(module_path_core)
+
+if module_path_casadi_converter not in sys.path:
+    sys.path.append(module_path_casadi_converter)
+
+
+from test_converted_functions import test_Dynamics_casadi
+# Load the CasADi versions of the functions you've converted
+from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi
+from converted_functions import loaded_polynomials
+import casadi as ca
+import numpy as np
+import matplotlib.pyplot as plt
 import time
-## ADD the packages here if you think it is needed and update it in this file.
+import os
+import sys
+import pickle
 
-## Import our libraries here
-Library= os.path.join(os.path.dirname(os.path.abspath(__file__)),"../core")
-sys.path.insert(0, Library)
-
-from TwoBP import (
-    car2kep, 
-    kep2car, 
-    twobp_cart, 
-    gauss_eqn, 
-    Event_COE, 
-    theta2M, 
-    M2theta, 
-    Param2NROE, 
-    guess_nonsingular_Bmat, 
-    lagrage_J2_diff, 
-    NSROE2car,
-    NSROE2LVLH,
-    NSROE2LVLH_2)
-
-from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics
-from constrains import con_chief_deputy_angle
-
-
-# Parameters that is of interest to the problem
-
-data = {
-    "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+# Import the CasADi versions of the functions you've converted
+from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi
+from TwoBP import Param2NROE, M2theta
+deg2rad = np.pi / 180
+# Parameters (same as the Python version)
+param = {
+    "Primary": [3.98600433e5, 6378.16, 7.2921150e-5],
     "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
-
-    # Satellites data including chief and deputies
     "satellites": {
         "chief": {
-            "mass": 300,         # Mass in kg
-            "area": 2,           # Cross-sectional area in m^2
-            "C_D": 0.9,          # Drag coefficient
+            "mass": 300,
+            "area": 2,
+            "C_D": 0.9
         },
         "deputy_1": {
             "mass": 250,
             "area": 1.8,
-            "C_D": 0.85,
+            "C_D": 0.85
         }
     },
-    "N_deputies": 2,  # Number of deputies
-    "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
-
+    "N_deputies": 2,
+    "sat": [1.2, 1.2, 1.2],  # Moments of inertia
 }
 
 print("Parameters initialized.")
@@ -91,7 +85,7 @@ i =NOE_chief[2]
 q1 =NOE_chief[3]
 q2 =NOE_chief[4]
 OM =NOE_chief[5]
-mu = data["Primary"][0]
+mu = param["Primary"][0]
 
 
 e=numpy.sqrt(q1**2 + q2**2)
@@ -129,7 +123,7 @@ parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 
 print("Formation parameters",parameters)
 # Initial relative orbital elements
-RNOE_0=Param2NROE(NOE_chief, parameters,data)
+RNOE_0=Param2NROE(NOE_chief, parameters,param)
 # RNOE_0[0]=0
 # RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2]) 
 
@@ -148,124 +142,59 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
 
 # test for gauess equation
-mu=data["Primary"][0]
+mu=param["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
 n_revol_T = 0.0005*365*24*60*60/Torb
 n_revolution=  n_revol_T
 T_total=n_revolution*Torb
 
 t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 100000)
+teval=numpy.linspace(0, T_total, 1000)
 # K=numpy.array([k1,k2])
- 
-data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
 
-uu = numpy.zeros((2,1)) # input torque to the dynamics model - it is fed inside the yaw dynamics.
+# Simulate
+uu_val = np.zeros((2, 1))  # Control inputs
 
-print("Number of Period",n_revolution)
-print("Orbital Period",Torb)
-print("Time of Integration",T_total)
-print("integration time step",teval[1]-teval[0])
-print("Number of data points",len(teval))
-print("Integration starting....")
+param["Init"] = [NOE_chief[4], NOE_chief[3], 0]  # Initial parameters for q1, q2, and t0
 
-# Start the timer
-start_time = time.time()
-
-sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-                        method='DOP853',args=(data,uu), rtol=1e-10, atol=1e-12,dense_output=True)
-
-# End the timer
-end_time = time.time()
-
-# Calculate the time taken
-execution_time = end_time - start_time
-
-# Print the execution time
-print(f"Time taken for integration: {execution_time:.4f} seconds")
-
-print("Integration done....")
-
-# Convert from NROE to Carterian co-ordinates. 
-rr_s=numpy.zeros((3,len(sol.y[0])))
-vv_s=numpy.zeros((3,len(sol.y[0])))
-
-for i in range(0,len(sol.y[0])):
-    # if sol.y[5][i]>2*numpy.pi:
-    #     sol.y[5][i]= 
- 
-    # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
-    #                                            sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
-    
-    yy1=sol.y[0:6,i]
-    yy2=sol.y[6:12,i]
-    if yy2[1]>2000:
-        print("ANOMALY",yy2[1])
-    
-    rr_s[:,i]=NSROE2LVLH(yy1,yy2,data)
-    angle_con=con_chief_deputy_angle(sol.y[:,i],data)
-    print("############# constains angle", angle_con)
-
-    # h = COE[0]
-    # e =COE[1]
-    # i =COE[2]
-    # OM = COE[3]
-    # om =COE[4]
-    # TA =COE[5]
-
-    
-print("mean position in x",numpy.mean(rr_s[0]))
-print("mean position in y",numpy.mean(rr_s[1]))
-# Spherical earth
-# Setting up Spherical Earth to Plot
-N = 50
-phi = numpy.linspace(0, 2 * numpy.pi, N)
-theta = numpy.linspace(0, numpy.pi, N)
-theta, phi = numpy.meshgrid(theta, phi)
-
-r_Earth = 6378.14  # Average radius of Earth [km]
-X_Earth = r_Earth * numpy.cos(phi) * numpy.sin(theta)
-Y_Earth = r_Earth * numpy.sin(phi) * numpy.sin(theta)
-Z_Earth = r_Earth * numpy.cos(theta)
-
-# draw the unit vectors of the ECI frame on the 3d plot of earth
+# Define the symbolic variables for CasADi integration
+t = ca.MX.sym('t')  # Time
+yy = ca.MX.sym('yy', len(yy_o))  # 14 state variables (6 NSROE for deputy, 6 NSROE for chief, 2 for yaw)
+uu = ca.MX.sym('uu', len(uu_val))   # Control inputs for yaw dynamics
 
 
+dynamics_casadi_sym = Dynamics_casadi(t, yy, param, uu)
+# Define the CasADi function for dynamics
+dynamics_function = ca.Function('dynamics', [t, yy, uu], [dynamics_casadi_sym])
 
-# Plotting Earth and Orbit
-fig = plt.figure(1)
-ax = plt.axes(projection='3d')
-# ax.plot_surface(X_Earth, Y_Earth, Z_Earth, color='blue', alpha=0.7)
-# x-axis
-# Add the unit vectors of the LVLH frame
-# Define a constant length for the arrows
-# Define a constant arrow length relative to the axis ranges
-# arrow_length = 0.01  # Adjust this factor to change the relative size of arrows
-# a=max(rr_s[0])
-# b=max(rr_s[1])
-# c= max(rr_s[2])
+# Define the ODE with just state `x` and control `p`
+ode = {'x': yy, 'p': uu, 'ode': dynamics_function(t, yy, uu)}
 
-# d = max([a,b,c])
-# # Normalize the vectors based on the axis scales
-# x_axis = numpy.array([arrow_length * max(rr_s[0])/d, 0, 0])
-# y_axis = numpy.array([0, arrow_length * max(rr_s[1])/d, 0])
-# z_axis = numpy.array([0, 0, arrow_length * max(rr_s[2])/d])
-# # add xlim and ylim
-# ax.set_xlim(-d, d)
-# ax.set_ylim(-d, d)
+print(print, yy_o, uu_val)
+dynamics_output = dynamics_function(0, yy_o, uu_val)
+print("!!!!!!!!!!!!!!!!Dynamics output:", dynamics_output.full())
 
-# # x-axis
-# ax.quiver(0, 0, 0, x_axis[0], x_axis[1], x_axis[2], color='r', arrow_length_ratio=0.1)
-# # y-axis
-# ax.quiver(0, 0, 0, y_axis[0], y_axis[1], y_axis[2], color='g', arrow_length_ratio=0.1)
-# # z-axis
-# ax.quiver(0, 0, 0, z_axis[0], z_axis[1], z_axis[2], color='b', arrow_length_ratio=0.1)
-# ax.plot3D(rr_s[0],rr_s[1],rr_s[2] , 'black', linewidth=2, alpha=1)
-# ax.set_title('LVLH frame - Deput Spacecraft')
-# ax.set_xlabel('x')
-# ax.set_ylabel('y')
-# ax.set_zlabel('z')
-# The original rr_s array is already defined in your code as the spacecraft trajectory
+# Setup the integrator
+integrator = ca.integrator('integrator', 'cvodes', ode, {'grid': teval, 'output_t0': True})
+
+# Use the integrator with initial states and inputs
+result = integrator(x0=yy_o, p=uu_val)
+
+# Extract results
+integrated_states = result['xf'].full()  # Integrated states
+print("Integrated states:", integrated_states)
+# Print the integrated states
+print("Integrated states shape:", integrated_states.shape)
+
+# Generate the LVLH Frame positions from CasADi results
+rr_s = np.zeros((3, len(teval)))
+
+# For each time step, compute the position
+for i in range(len(teval)):
+    yy1 = integrated_states[0:6,i]  # Deputy NSROE
+    yy2 = integrated_states[6:12,i]  # Chief NSROE
+    rr_s[:, i] = NSROE2LVLH_casadi(yy1, yy2, param).full().flatten()
+    print("rr_s:", rr_s[:, i])
 
 # Set the limits to 1 km for each axis
 x_limits = [-0.5, 1.5]  # 1 km range centered at 0
@@ -279,7 +208,7 @@ fig = plt.figure(figsize=(12, 6))
 ax1 = fig.add_subplot(121, projection='3d')
 
 # Plot the trajectory in 3D space
-line, = ax1.plot3D(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
+line, = ax1.plot3D(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1, label='Deputy 1')
 
 # Draw reference frame arrows (LVLH) on the interactive plot
 arrow_length = 0.1  # Adjust this factor to change the relative size of arrows
@@ -304,7 +233,7 @@ ax1.set_xlabel('x (km)')
 ax1.set_ylabel('y (km)')
 ax1.set_zlabel('z (km)')
 ax1.set_title('LVLH frame - Deput Spacecraft (Interactive)')
-
+ax1.legend(loc='best')
 
 # Dynamic frame plot (linked to the interactive plot)
 ax2 = fig.add_subplot(122, projection='3d')
@@ -342,7 +271,7 @@ def update_dynamic_frame(event):
 ax1.figure.canvas.mpl_connect('motion_notify_event', update_dynamic_frame)
 
 # Show the zoomed plot
-plt.show()
+plt.show() 
 
 ############# Relative orbital Dynamics ####################
 fig, axs = plt.subplots(3, 1)
@@ -362,28 +291,28 @@ axs[2].set_title('z')
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[0])
+axs[0].plot(teval, integrated_states[0])
 axs[0].set_title('semi major axis')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[1])
+axs[1].plot(teval, integrated_states[1])
 axs[1].set_title('mean true latitude')
 
-axs[2].plot(teval, sol.y[2])
+axs[2].plot(teval, integrated_states[2])
 axs[2].set_title('inclination')
  
 
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[3])
+axs[0].plot(teval, integrated_states[3])
 axs[0].set_title('q1')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[4])
+axs[1].plot(teval, integrated_states[4])
 axs[1].set_title('q2')
 
-axs[2].plot(teval, sol.y[5])
+axs[2].plot(teval, integrated_states[5])
 axs[2].set_title('right ascenstion of ascending node')
 
 
@@ -424,11 +353,11 @@ plt.title('Plot of x vs z')
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[12])
+axs[0].plot(teval, integrated_states[12])
 axs[0].set_title('Chief yaw angle')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[13])
+axs[1].plot(teval, integrated_states[13])
 axs[1].set_title('Deputy 1 yaw angle')
 
 

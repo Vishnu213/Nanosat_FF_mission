@@ -1239,10 +1239,10 @@ def NSROE2LVLH(NSROE,NSOE0,data):
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-    print("eta",eta)
-    print("deltal",delta_lambda0)
-    print("deltai",delta_q1)
-    print("deltaq1",delta_q2)
+    # print("eta",eta)
+    # print("deltal",delta_lambda0)
+    # print("deltai",delta_q1)
+    # print("deltaq1",delta_q2)
 
 
     e1 =(a / eta) * ((1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
