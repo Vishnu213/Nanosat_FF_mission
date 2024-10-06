@@ -477,7 +477,7 @@ def normalize_casadi(v):
 
 km2m = 1e3  # Conversion factor from kilometers to meters
 
-
+# Function to calculate aerodynamic forces in CasADi
 def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, data, AOA):
     a_drag_total = ca.MX.zeros(3)  # Initialize drag acceleration vector
     a_lift_total = ca.MX.zeros(3)  # Initialize lift acceleration vector
@@ -485,9 +485,23 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
     spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
     Area = data["S/C"][1]  # Cross-sectional area (m^2)
     
-    for surface in surface_properties:
-        normal_vector = ca.MX(surface[:3])  # Extract normal vector
+    print("eqweqweweqwe",surface_properties.shape)
+    surface_splits = ca.vertsplit(surface_properties, 1)
+    for surface in surface_splits:
+
+        surface = ca.reshape(surface, 4, 1)
+        print("surface",surface.shape)
+        normal_vector = ca.MX(surface[0:3])  # Extract normal vector
         projected_area = surface[3]  # Extract projected area
+        
+        normal_vector = ca.reshape(normal_vector, 3, 1)
+
+        # Set projected_area to 404 if surface_properties is zero
+        projected_area = ca.if_else(ca.sum1(surface) == 0, ca.MX.ones(1)*404, projected_area)
+        temp = ca.MX.ones(3)*404
+        print("projected_area",projected_area.shape)
+        print("normal_vector",normal_vector.shape, temp.shape)
+        normal_vector = ca.if_else(ca.sum1(surface) == 0, ca.MX.ones(3)*404, normal_vector)
 
         S_i = projected_area  # Area of the plate (m^2)
         S_ref_i = 1000  # Reference area for CL and CD
@@ -504,7 +518,7 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
         v_inc = ca.norm_2(v_rel)  # Incoming velocity (m/s)
         alpha_acc = 1.0  # Accommodation coefficient
 
-        # Calculate Cd and Cl using CasADi versions of calculate_cd_cl (you may need to convert it too)
+        # Calculate Cd and Cl using CasADi versions of calculate_cd_cl (you may need to convert this function as well)
         C_D, C_L = calculate_cd_cl_casadi(S_i, S_ref_i, gamma_i, l_i, v_inc, M, T, alpha_acc)
 
         B_D = spacecraft_mass / (Area * projected_area * C_D)
@@ -513,16 +527,20 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
         drag_direction = v_rel / ca.norm_2(v_rel)
         lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
 
+        # Compute drag and lift accelerations
         a_drag = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_D) * drag_direction
         a_lift = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_L) * lift_direction
 
+        # Apply CasADi if_else to set a_drag and a_lift to zero if projected_area is 404
+        a_drag = ca.if_else(ca.sum1(projected_area) == 404, ca.MX.zeros(3), a_drag)
+        a_lift = ca.if_else(ca.sum1(projected_area) == 404, ca.MX.zeros(3), a_lift)
+
         a_drag_total += a_drag / spacecraft_mass
         a_lift_total += a_lift / spacecraft_mass
+        # print("a_drag_total",a_drag_total.shape)
+        # print("a_lift_total",a_lift_total.shape)
 
     return a_drag_total, a_lift_total
-
-
-
 
 # Function to load the precomputed polynomial coefficients from a file
 def load_polynomials(filename='polynomials.pkl'):
@@ -668,111 +686,174 @@ def constant_value_casadi(value):
     
     return f
 
-
-
-
-# Main function for looking up surface properties
-def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
+def lookup_surface_properties_casadi(angle, poly_coeffs):
     surfaces_data = []
 
-
-
-    # Loop over surfaces and perform symbolic polynomial evaluation
+    # Loop through each surface and evaluate polynomials symbolically
     for surface, coeffs in poly_coeffs.items():
-        # Perform the symbolic polynomial evaluation
+        print(f"\nProcessing surface: {surface}")
+        
+        # Evaluate polynomials symbolically using CasADi
         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
 
-        # Create a CasADi function to evaluate these polynomials at a numeric angle
-        poly_eval_func = ca.Function('poly_eval', [angle], [normal_x, normal_y, normal_z, projected_area])
+        print(f"normal_x: {normal_x}, normal_y: {normal_y}, normal_z: {normal_z}, projected_area: {projected_area}")
 
-        # Evaluate the CasADi function at the provided numeric angle (angle_numeric)
-        evaluated_normals = poly_eval_func(angle_numeric)
+        # Add the result to surfaces_data (CasADi symbolic expressions)
+        surfaces_data.append(ca.vertcat(normal_x, normal_y, normal_z, projected_area))
 
-        # Extract evaluated values into NumPy format
-        normal_x_val = evaluated_normals[0].full().item()
-        normal_y_val = evaluated_normals[1].full().item()
-        normal_z_val = evaluated_normals[2].full().item()
-        projected_area_val = evaluated_normals[3].full().item()
+    # Stack all symbolic surfaces into a single matrix (4xN)
+    surfaces_concat = ca.horzcat(*surfaces_data)
+    print(f"Concatenated surfaces matrix (4xN):\n{surfaces_concat}")
 
-        # Check the projected area and filter valid surfaces
-        if projected_area_val > 0:
-            surfaces_data.append([normal_x_val, normal_y_val, normal_z_val, projected_area_val])
+    # Extract the projected areas (4th row)
+    projected_areas = surfaces_concat[3, :]
+    print(f"Projected areas before filtering: {projected_areas}")
 
-    # Convert the surfaces data to a NumPy array
-    surfaces_np = np.array(surfaces_data)
+    # Initialize an empty MX matrix for filtered surfaces
+    filtered_surfaces = ca.MX.zeros(4, 0)
 
-    non_zero_surfaces_dm = ca.DM(surfaces_data)  # No need to transpose back
-    non_zero_surfaces_dm = ca.transpose(non_zero_surfaces_dm)  # Correct CasADi transpose
+    # Loop through each column and apply filtering based on projected_area
+    for i in range(surfaces_concat.shape[1]):
+        surface_i = surfaces_concat[:, i]
+        print(f"\nChecking surface {i} with projected_area: {projected_areas[i]}")
+        
+        # Condition for strictly positive projected_area
+        condition = projected_areas[i] > 0
+        print(f"Condition for projected_area > 0: {condition}")
+        
+        # Use ca.if_else to filter the valid surface
+        filtered_surface = ca.if_else(condition, surface_i, ca.MX.zeros(4, 1))
+        print(f"Filtered surface {i} (after applying condition): {filtered_surface}")
+
+        # Concatenate filtered surfaces (start with an empty matrix)
+        filtered_surfaces = ca.horzcat(filtered_surfaces, filtered_surface)
+
+    # Print the size of the final filtered surfaces matrix
+    print("Filtered non-zero surfaces size:", filtered_surfaces.shape)
+    print(f"Filtered surfaces matrix:\n{filtered_surfaces}")
+
+    # Sum each column
+    column_sums = ca.sum1(ca.fabs(filtered_surfaces))  # Summing the absolute values of each column
+
+    # Create a mask to check which columns are non-zero
+    non_zero_columns_mask = column_sums > 0  # True for columns that are non-zero
+
+    # Collect non-zero columns into a new filtered matrix
+    filtered_matrix = ca.MX.zeros(4, 0)  # Initialize an empty CasADi matrix for the filtered results
+    for i in range(filtered_surfaces.shape[1]):
+        # Use CasADi's conditional approach to build the new matrix
+        filtered_matrix = ca.horzcat(filtered_matrix, ca.if_else(non_zero_columns_mask[i], filtered_surfaces[:, i], ca.MX.zeros(4, 1)))
+    
+    print(f"Filtered non-zero surfaces matrix:\n{filtered_matrix}")
+    print("Filtered non-zero surfaces size:", filtered_matrix.shape)
+    return ca.transpose(filtered_matrix)
+
+# # # # Main function for looking up surface properties
+# # # def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
+# # #     surfaces_data = []
+
+
+
+# # #     # Loop over surfaces and perform symbolic polynomial evaluation
+# # #     for surface, coeffs in poly_coeffs.items():
+# # #         # Perform the symbolic polynomial evaluation
+# # #         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
+# # #         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
+# # #         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
+# # #         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
+
+# # #         # Create a CasADi function to evaluate these polynomials at a numeric angle
+# # #         poly_eval_func = ca.Function('poly_eval', [angle], [normal_x, normal_y, normal_z, projected_area])
+
+# # #         # Evaluate the CasADi function at the provided numeric angle (angle_numeric)
+# # #         evaluated_normals = poly_eval_func(angle_numeric)
+
+# # #         # Extract evaluated values into NumPy format
+# # #         normal_x_val = evaluated_normals[0].full().item()
+# # #         normal_y_val = evaluated_normals[1].full().item()
+# # #         normal_z_val = evaluated_normals[2].full().item()
+# # #         projected_area_val = evaluated_normals[3].full().item()
+
+# # #         # Check the projected area and filter valid surfaces
+# # #         if projected_area_val > 0:
+# # #             surfaces_data.append([normal_x_val, normal_y_val, normal_z_val, projected_area_val])
+
+# # #     # Convert the surfaces data to a NumPy array
+# # #     surfaces_np = np.array(surfaces_data)
+
+# # #     non_zero_surfaces_dm = ca.DM(surfaces_data)  # No need to transpose back
+# # #     non_zero_surfaces_dm = ca.transpose(non_zero_surfaces_dm)  # Correct CasADi transpose
 
     
-    return non_zero_surfaces_dm
+# # #     return non_zero_surfaces_dm
 
 
 
-def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, data, AOA):
-    a_drag_total = ca.DM.zeros(3)  # Initialize drag acceleration vector
-    a_lift_total = ca.DM.zeros(3)  # Initialize lift acceleration vector
+# # # # # # def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, data, AOA):
+# # # # # #     a_drag_total = ca.DM.zeros(3)  # Initialize drag acceleration vector
+# # # # # #     a_lift_total = ca.DM.zeros(3)  # Initialize lift acceleration vector
     
-    spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
-    Area = data["S/C"][1]  # Cross-sectional area (m^2)  
-    print("surface_properties:", surface_properties)
-    # Ensure that surface_properties is in the correct shape (4xN)
-    assert surface_properties.shape[0] == 4, "Each surface should have 4 components (normal_x, normal_y, normal_z, projected_area)"
+# # # # # #     spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
+# # # # # #     Area = data["S/C"][1]  # Cross-sectional area (m^2)  
+# # # # # #     print("surface_properties:", surface_properties)
+# # # # # #     # Ensure that surface_properties is in the correct shape (4xN)
+# # # # # #     print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", surface_properties.shape, surface_properties.shape[1] == 4)
+# # # # # #     assert surface_properties.shape[1] == 4, "Each surface should have 4 components (normal_x, normal_y, normal_z, projected_area)"
     
-    # Iterate through surface properties using horzsplit to split into individual surfaces
-    surfaces_split = ca.horzsplit(surface_properties, 1)  # Split into individual surfaces
+# # # # # #     # Iterate through surface properties using horzsplit to split into individual surfaces
+# # # # # #     surfaces_split =  ca.vertsplit(surface_properties, 1)  # Split into individual surfaces
 
-    for surface in surfaces_split:
-        normal_vector = surface[:3]  # Extract normal vector
-        projected_area = surface[3]  # Extract projected area
+# # # # # #     for surface in surfaces_split:
+# # # # # #         normal_vector = surface[:3]  # Extract normal vector
+# # # # # #         projected_area = surface[3]  # Extract projected area
 
-        # CL and CD calculation
-        S_i = projected_area  # Area of the plate (m^2)
-        S_ref_i = 1000  # large common denominator for CL and CD
+# # # # # #         # CL and CD calculation
+# # # # # #         S_i = projected_area  # Area of the plate (m^2)
+# # # # # #         S_ref_i = 1000  # large common denominator for CL and CD
 
-        # gamma for this surface
-        v_inc_normalized = v_rel / ca.norm_2(v_rel)
-        n_i_normalized = normal_vector / ca.norm_2(normal_vector)
-        theta = ca.acos(ca.dot(v_inc_normalized, n_i_normalized))
-        gamma_i = ca.cos(theta)
+# # # # # #         # gamma for this surface
+# # # # # #         v_inc_normalized = v_rel / ca.norm_2(v_rel)
+# # # # # #         n_i_normalized = normal_vector / ca.norm_2(normal_vector)
+# # # # # #         theta = ca.acos(ca.dot(v_inc_normalized, n_i_normalized))
+# # # # # #         gamma_i = ca.cos(theta)
 
-        # direction cosine for lift direction for this surface
-        lift_direction = ca.cross(normal_vector, v_rel)
-        lift_direction_normalized = lift_direction / ca.norm_2(lift_direction)
+# # # # # #         # direction cosine for lift direction for this surface
+# # # # # #         lift_direction = ca.cross(normal_vector, v_rel)
+# # # # # #         lift_direction_normalized = lift_direction / ca.norm_2(lift_direction)
         
-        l_i = ca.sin(theta)
-        v_inc = ca.norm_2(v_rel)  # Incoming velocity (m/s)
+# # # # # #         l_i = ca.sin(theta)
+# # # # # #         v_inc = ca.norm_2(v_rel)  # Incoming velocity (m/s)
 
-        Ma = M  # Mean molar mass of air (g/mol)
-        Ta = T  # Ambient temperature (K)
-        alpha_acc = 1.0  # Accommodation coefficient
+# # # # # #         Ma = M  # Mean molar mass of air (g/mol)
+# # # # # #         Ta = T  # Ambient temperature (K)
+# # # # # #         alpha_acc = 1.0  # Accommodation coefficient
 
-        # Dummy Cd and Cl calculation functions (replace with actual implementation)
-        C_D, C_L = calculate_cd_cl_casadi(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc)
+# # # # # #         # Dummy Cd and Cl calculation functions (replace with actual implementation)
+# # # # # #         C_D, C_L = calculate_cd_cl_casadi(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc)
 
-        # Calculate drag coefficient for this surface
-        B_D = spacecraft_mass / (Area * projected_area * C_D)
+# # # # # #         # Calculate drag coefficient for this surface
+# # # # # #         B_D = spacecraft_mass / (Area * projected_area * C_D)
         
-        # Calculate lift coefficient for this surface
-        B_L = spacecraft_mass / (Area * projected_area * C_L)
+# # # # # #         # Calculate lift coefficient for this surface
+# # # # # #         B_L = spacecraft_mass / (Area * projected_area * C_L)
         
-        # Drag acts opposite to velocity
-        drag_direction = v_rel / ca.norm_2(v_rel)
+# # # # # #         # Drag acts opposite to velocity
+# # # # # #         drag_direction = v_rel / ca.norm_2(v_rel)
         
-        lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
+# # # # # #         lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
         
-        # Calculate the contribution to drag acceleration from this surface
-        a_drag = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_D) * drag_direction
-        a_drag_total += a_drag / spacecraft_mass
+# # # # # #         # Calculate the contribution to drag acceleration from this surface
+# # # # # #         a_drag = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_D) * drag_direction
+# # # # # #         a_drag_total += a_drag / spacecraft_mass
         
-        # Calculate the contribution to lift acceleration from this surface
-        a_lift = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_L) * lift_direction
-        a_lift_total += a_lift / spacecraft_mass
+# # # # # #         # Calculate the contribution to lift acceleration from this surface
+# # # # # #         a_lift = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_L) * lift_direction
+# # # # # #         a_lift_total += a_lift / spacecraft_mass
     
-    return a_drag_total, a_lift_total
+# # # # # #     return a_drag_total, a_lift_total
 
 # # Generic CasADi-based function to compute aerodynamic forces for a spacecraft entity
 # def compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, vv, rr):
@@ -799,43 +880,47 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
 
 #     return a_drag, a_lift
 
-
-# CasADi version of the function to compute aerodynamic forces for a spacecraft entity
 def compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, vv, rr):
-    # Relative velocity of the spacecraft
+    
+    assert vv.shape == (3, 1), f"vv shape mismatch: expected (3, 1), got {vv.shape}"
+    assert rr.shape == (3, 1), f"rr shape mismatch: expected (3, 1), got {rr.shape}"
+    
+    # Extract symbolic values from the dictionary
+    spacecraft_mass_sym = entity_data["S/C"][0]
+    area_sym = entity_data["S/C"][1]
+    primary_gravity_sym = entity_data["Primary"][0]
+    primary_radius_sym = entity_data["Primary"][1]
+    primary_rotation_sym = entity_data["Primary"][2]
+
+    # Reshape vv and rr
     vv = ca.reshape(vv, 3, 1)
     rr = ca.reshape(rr, 3, 1)
-    
-    v_rel = vv - ca.cross(ca.DM([0, 0, entity_data["Primary"][2]]), rr)  # Absolute velocity - Earth rotation factor
+
+    # Calculate the relative velocity (symbolic)
+    v_rel = vv - ca.cross(ca.vertcat(0, 0, primary_rotation_sym), rr)
 
     # Magnitude of the position vector
     rr_mag = ca.norm_2(rr)
 
     # Convert the position vector and velocity to NNSOE using CasADi version
-    NNSOE_den = car2NNSOE_density_casadi(rr, vv, entity_data["Primary"][0])
+    NNSOE_den = car2NNSOE_density_casadi(rr, vv, primary_gravity_sym)
     i = NNSOE_den[2]
     u = NNSOE_den[3]
 
     # Compute the altitude
-    h = rr_mag - entity_data["Primary"][1]
+    h = rr_mag - primary_radius_sym
 
-    print("h:", h.shape)
-    print("u:", u.shape)
-    print("i:", i.shape)
     # Get density, molar mass, and temperature using CasADi version of density_get
-    test_input_casadi = ca.vertcat(h, u, i) 
+    test_input_casadi = ca.vertcat(h, u, i)
     density_output = density_get_casadi(test_input_casadi)
 
     # Unpack the output properly
-    rho = density_output[0]  # Get the first element
-    M = density_output[1]    # Get the second element
-    T = density_output[2]    # Get the third element
+    rho = density_output[0]
+    M = density_output[1]
+    T = density_output[2]
 
-    # Convert AOA to symbolic before passing it to CasADi functions
-    AOA_sym = ca.MX.sym('AOA')
-
-    # Lookup surface properties using the CasADi version (now using symbolic AOA)
-    surface_properties = lookup_surface_properties_casadi(AOA_sym, loaded_polynomials, AOA)
+    # Lookup surface properties using the CasADi version
+    surface_properties = lookup_surface_properties_casadi(AOA, loaded_polynomials)
 
     # Calculate drag and lift using the CasADi version of calculate_aerodynamic_forces
     a_drag, a_lift = calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, entity_data, AOA)
@@ -897,7 +982,7 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
 
         force_sum = a_drag + a_lift
         print(C1_casadi(AOA).shape)
-        print(force_sum.shape)
+        print("AAAAAAAAAAAAAAA",force_sum.shape)
         # Transform the forces into LVLH frame
         rel_f = ca.mtimes(C1_casadi(AOA), force_sum)  # Combine and rotate drag and lift
 

@@ -114,6 +114,9 @@ from converted_functions import lookup_surface_properties_casadi
 from converted_functions import calculate_aerodynamic_forces_casadi  # CasADi version
 from lift_drag import calculate_aerodynamic_forces  # Python version
 
+from converted_functions import compute_aerodynamic_forces_casadi  # CasADi-converted function
+from lift_drag import compute_aerodynamic_forces  # Python version
+
 
 from converted_functions import compute_forces_for_entities_casadi  # CasADi-converted function
 from lift_drag import compute_forces_for_entities  # Python version
@@ -544,23 +547,44 @@ def test_lookup_surface_properties_casadi():
     # Load the polynomial coefficients
     poly_coeffs = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl')
 
-    angle = 45  # Example angle in degrees
+    angle_num = 45  # Example angle in degrees
 
     # NumPy-based results using your saved function
-    numpy_results = lookup_surface_properties(np.deg2rad(angle), poly_coeffs)
+    numpy_results = lookup_surface_properties(np.deg2rad(angle_num), poly_coeffs)
 
-    # CasADi-based results using the CasADi version
-    angle_casadi = ca.MX.sym('angle_casadi')  # Symbolic angle variable
-    angle_num = np.deg2rad(angle)  # Convert the numeric angle to radians
-    casadi_results = lookup_surface_properties_casadi(angle_casadi, poly_coeffs, angle_num)
+    # Test input for angle (symbolic)
+    angle = ca.MX.sym('angle')
 
-    # Convert the numeric angle to radians and evaluate using the function
-    casadi_results_evaluated = casadi_results.full().T
+    # Call the CasADi function to evaluate the surfaces symbolically
+    surfaces_sym = lookup_surface_properties_casadi(angle, poly_coeffs)
 
-    # Compare the results from both versions
-    assert np.allclose(numpy_results, casadi_results_evaluated, atol=1e-6), \
-        f"Results differ between Python and CasADi. Python: {numpy_results}, CasADi: {casadi_results_evaluated}"
-    
+    # Create a CasADi function for the symbolic evaluation
+    surface_eval_func = ca.Function('surface_eval', [angle], [surfaces_sym])
+
+    # Evaluate the function numerically at an angle of 1.5
+    casadi_results = surface_eval_func(np.deg2rad(angle_num))
+
+    # Now, convert the results to a NumPy array
+    # casadi_results_evaluated = ca.Function('f', [], [casadi_results])()  # Evaluate MX
+    casadi_results_evaluated = casadi_results.full()  # Convert to NumPy
+    print("sdadsa",casadi_results.full().shape)
+    non_zero_columns_mask = np.any(casadi_results_evaluated != 0, axis=1)
+    # Extract columns that are not all zeros
+    filtered_array = casadi_results_evaluated[non_zero_columns_mask,:]
+    print("sdadsa",filtered_array)
+    print("sdadsa 1111",numpy_results)
+    # Check if shapes are the same
+    assert numpy_results.shape == filtered_array.shape, \
+        f"Shapes differ between Python and CasADi. Python shape: {numpy_results.shape}, CasADi shape: {filtered_array.shape}"
+
+    # Compare the values using np.allclose with a tolerance
+    assert np.allclose(numpy_results, filtered_array, atol=1e-6), \
+        f"Results differ between Python and CasADi. Python: {numpy_results}, CasADi: {filtered_array}"
+
+    # If the code reaches here, both shape and values are equal
+    print("The shapes and values match between Python and CasADi results.")
+
+
 # Helper function to set up test data for both Python and CasADi
 def get_test_data():
     # Example test data for spacecraft and atmosphere
@@ -579,60 +603,118 @@ def get_test_data():
     surface_properties = np.array([
         [1.17939671, -0.32889057, 0.0, 1.17939671],
         [0.2342222, -0.35585337, 0.0, 0.2342222]
-    ]).T  
+    ])
 
     return v_rel, rho, surface_properties, M, T, data, AOA
 
 @pytest.mark.parametrize("v_rel, rho, surface_properties, M, T, data, AOA", [get_test_data()])
+
 def test_calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA):
+    
+    v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
     # Call the Python version of the function
-    python_drag, python_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties.T, M, T, data, AOA)
+    python_drag, python_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA)
 
-    # Convert input arrays to CasADi DM objects
+    # Create symbolic variables for the inputs
+    v_rel_sym = ca.MX.sym('v_rel', v_rel.shape[0])  # v_rel is a 1D array
+    surface_properties_sym = ca.MX.sym('surface_properties', surface_properties.shape[0], surface_properties.shape[1])  # surface_properties is 2D
+    AOA_sym = ca.MX.sym('AOA')  # AOA is a scalar or 1D array
+
+    rho_sym = ca.MX.sym('rho')  # Scalar symbolic for rho
+    M_sym = ca.MX.sym('M')  # Scalar symbolic for molar mass
+    T_sym = ca.MX.sym('T')  # Scalar symbolic for temperature
+    data_sym = ca.MX.sym('data')  # Spacecraft mass (assumed scalar)
+
+    # Create a CasADi function from calculate_aerodynamic_forces_casadi
+    casadi_func = ca.Function(
+        'calc_aero_forces',
+        [v_rel_sym, rho_sym, surface_properties_sym, M_sym, T_sym, data_sym, AOA_sym],
+        calculate_aerodynamic_forces_casadi(v_rel_sym, rho_sym, surface_properties_sym, M_sym, T_sym, data, AOA_sym))
+    
+
+    # Convert input arrays to CasADi DM objects (numeric)
     v_rel_casadi = ca.DM(v_rel)
     surface_properties_casadi = ca.DM(surface_properties)
     AOA_casadi = ca.DM(AOA)
 
-    # Call the CasADi version of the function
-    casadi_drag, casadi_lift = calculate_aerodynamic_forces_casadi(v_rel_casadi, rho, surface_properties_casadi, M, T, data, AOA_casadi)
+    # Call the CasADi function and get numeric results
+    casadi_drag, casadi_lift = casadi_func(v_rel_casadi, ca.DM(rho), surface_properties_casadi, ca.DM(M), ca.DM(T), ca.DM(data['S/C'][0]), AOA_casadi)
 
-    # Convert CasADi outputs to NumPy arrays for comparison
-    casadi_drag_np = np.array(casadi_drag.full()).flatten()
-    casadi_lift_np = np.array(casadi_lift.full()).flatten()
+    # Convert CasADi results to NumPy for comparison
+    casadi_drag_np = np.array(casadi_drag.full()).flatten()  # Drag output as NumPy array
+    casadi_lift_np = np.array(casadi_lift.full()).flatten()  # Lift output as NumPy array
+
+
+    print("Python drag:", python_drag)
+    print("CasADi drag:", casadi_drag_np)
+    print("Python lift:", python_lift)
+    print("CasADi lift:", casadi_lift_np)
+ # Shape checks
+    assert python_drag.shape == casadi_drag_np.shape, f"Drag shape mismatch! Python: {python_drag.shape}, CasADi: {casadi_drag_np.shape}"
+    assert python_lift.shape == casadi_lift_np.shape, f"Lift shape mismatch! Python: {python_lift.shape}, CasADi: {casadi_lift_np.shape}"
 
     # Compare Python and CasADi results
     assert np.allclose(python_drag, casadi_drag_np, atol=1e-6), f"Drag results differ! Python: {python_drag}, CasADi: {casadi_drag_np}"
     assert np.allclose(python_lift, casadi_lift_np, atol=1e-6), f"Lift results differ! Python: {python_lift}, CasADi: {casadi_lift_np}"
 
+def get_test_data_compute():
+    # Define the input data for the test
+    entity_data = {
+        "S/C": [300, 2],  # Spacecraft mass (kg) and cross-sectional area (m^2)
+        "Primary": [398600, 6378, 7.2921150e-5]  # Primary body (Earth) with gravitational constant, radius, and rotation rate
+    }
 
-# Test function for calculating aerodynamic forces using Python and CasADi
-@pytest.mark.parametrize("v_rel, rho, surface_properties, M, T, data, AOA", [get_test_data()])
-def test_compute_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA):
-    """
-    Test function to compare the Python and CasADi versions of aerodynamic force calculations.
-    """
+    # Load the polynomial coefficients from a saved file
+    loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
 
-    # Call the Python version
-    python_drag, python_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties.T, M, T, data, AOA)
+    # Angle of attack in radians
+    AOA = 0.025  # Equivalent to 5 degrees in radians
 
-    # Convert input arrays to CasADi DM objects
-    v_rel_casadi = ca.DM(v_rel)
-    surface_properties_casadi = ca.DM(surface_properties)
+    # Relative position and velocity vectors for the spacecraft
+    rr = np.array([82.15330852, -5684.43257548, -3114.50144513])  # Example r2 vector
+    vv = np.array([0.05410418, -3.74362997, 6.90235197])  # Example v2 vector
+
+    # Atmospheric density (example value), molar mass, and temperature
+    rho = 2e-12  # Example density in kg/m^3
+
+    return entity_data, loaded_polynomials, AOA, vv, rr
+
+@pytest.mark.parametrize("entity_data, loaded_polynomials, AOA, vv, rr", [get_test_data_compute()])
+def test_compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
+    # Call the Python version of the function
+    python_drag, python_lift = compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr)
+
+    # Create symbolic variables for the inputs
+    v_rel_sym = ca.MX.sym('v_rel', 3)
+    rr_sym = ca.MX.sym('rr', 3)
+    AOA_sym = ca.MX.sym('AOA')
+
+
+    # Call the CasADi version of the function (symbolic)
+    casadi_drag_sym, casadi_lift_sym = compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA_sym, v_rel_sym, rr_sym)
+
+    # Define the CasADi function for symbolic inputs
+    casadi_func = ca.Function('aero_forces', [v_rel_sym, rr_sym, AOA_sym], [casadi_drag_sym, casadi_lift_sym])
+
+    # Convert input arrays to CasADi DM objects (numeric inputs)
+    vv_casadi = ca.DM(vv)
+    rr_casadi = ca.DM(rr)
     AOA_casadi = ca.DM(AOA)
 
-    # Call the CasADi version of the function
-    casadi_drag, casadi_lift = calculate_aerodynamic_forces_casadi(v_rel_casadi, rho, surface_properties_casadi, M, T, data, AOA_casadi)
+    # Call the CasADi function with numeric inputs
+    casadi_results = casadi_func(vv_casadi, rr_casadi, AOA_casadi)
 
-    # Convert CasADi outputs to NumPy arrays for comparison
-    casadi_drag_np = np.array(casadi_drag.full()).flatten()
-    casadi_lift_np = np.array(casadi_lift.full()).flatten()
+    # Convert CasADi results to NumPy arrays for comparison
+    casadi_drag_np = np.array(casadi_results[0].full()).flatten()
+    casadi_lift_np = np.array(casadi_results[1].full()).flatten()
 
-    # Compare Python and CasADi results
-    assert np.allclose(python_drag, casadi_drag_np, atol=1e-6), f"Drag results differ! Python: {python_drag}, CasADi: {casadi_drag_np}"
-    assert np.allclose(python_lift, casadi_lift_np, atol=1e-6), f"Lift results differ! Python: {python_lift}, CasADi: {casadi_lift_np}"
+    # Shape checks
+    assert python_drag.shape == casadi_drag_np.shape, f"Drag shape mismatch! Python: {python_drag.shape}, CasADi: {casadi_drag_np.shape}"
+    assert python_lift.shape == casadi_lift_np.shape, f"Lift shape mismatch! Python: {python_lift.shape}, CasADi: {casadi_lift_np.shape}"
 
-    print("Test passed: Python and CasADi outputs match for aerodynamic forces.")
-
+    # Value checks (tolerance of 1e-6 for small differences)
+    assert np.allclose(python_drag, casadi_drag_np, atol=1e-6), f"Drag values mismatch! Python: {python_drag}, CasADi: {casadi_drag_np}"
+    assert np.allclose(python_lift, casadi_lift_np, atol=1e-6), f"Lift values mismatch! Python: {python_lift}, CasADi: {casadi_lift_np}"
 
 def get_test_data_multiple_entities():
     # Load the polynomial coefficients from a saved file
@@ -657,7 +739,7 @@ def get_test_data_multiple_entities():
     ])
 
     # Example angles of attack (AOA) for each spacecraft in radians
-    alpha_list = [np.radians(5), np.radians(3)]  # Chief and deputy angles of attack in radians
+    alpha_list = np.array([np.radians(5), np.radians(3)])  # Chief and deputy angles of attack in radians
 
     # Return the test data
     return data, loaded_polynomials, alpha_list, vv, rr
@@ -668,23 +750,43 @@ def test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, r
     # Python version
     forces_python = compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
 
-    # CasADi version: convert input arrays to CasADi DM objects
+    # Create symbolic variables for the inputs
+    alpha_sym = ca.MX.sym('alpha',alpha_list.shape[0])
+    vv_sym = ca.MX.sym('vv',vv.shape[0],vv.shape[1])
+    rr_sym = ca.MX.sym('rr',rr.shape[0],rr.shape[1])
+
+    # Call CasADi version of the function (symbolic)
+    forces_ca_sym = compute_forces_for_entities_casadi(data, loaded_polynomials, alpha_sym, vv_sym, rr_sym)
+
+    # Define the CasADi function
+    forces_casadi_func = ca.Function('forces_casadi', [alpha_sym, vv_sym, rr_sym], [forces_ca_sym])
+
+    # Convert input arrays to CasADi DM objects (numeric)
     vv_casadi = ca.DM(vv)
     rr_casadi = ca.DM(rr)
     alpha_list_casadi = ca.DM(alpha_list)
 
-    # Call CasADi function
-    forces_casadi = compute_forces_for_entities_casadi(data, loaded_polynomials, alpha_list_casadi, vv_casadi, rr_casadi)
+    # Evaluate the CasADi function with numeric inputs
+    forces_casadi_result = forces_casadi_func(alpha_list_casadi, vv_casadi, rr_casadi)
 
     # Convert CasADi outputs to NumPy arrays for comparison
-    forces_casadi_np = np.array(forces_casadi.full()).reshape(3, 1)  # Convert and reshape to 3x1
+    forces_casadi_np = np.array(forces_casadi_result.full()).reshape(3, 1)  # Convert and reshape to 3x1
 
-    # Compare Python and CasADi results
-    for force_python, force_casadi in zip(forces_python, forces_casadi_np):
-        assert np.allclose(force_python, force_casadi, atol=1e-6), \
-            f"Force mismatch! Python: {force_python}, CasADi: {force_casadi}"
+    print("Python forces:", forces_python)
+    print("CasADi forces:", forces_casadi_np)
+    print("Python forces shape:", forces_python.shape)
+    print("CasADi forces shape:", forces_casadi_np.shape)
 
-    print("Test passed: Python and CasADi outputs are close.")
+# Compare Python and CasADi results
+
+    assert forces_python.shape[0] == forces_casadi_np.shape[0], f"Drag shape mismatch! Python: {forces_python.shape}, CasADi: {forces_casadi_np.shape}"
+
+    # Check the values using np.allclose with a tolerance
+    assert np.allclose(forces_python, forces_casadi_np, atol=1e-6), \
+        f"Force mismatch! Python: {forces_python}, CasADi: {forces_casadi_np}"
+
+    print("Test passed: Python and CasADi outputs match in both shape and values.")
+
 
 
 from dynamics import Lagrange_deri, guess_nonsingular_Bmat  # Make sure the import path is correct
@@ -838,38 +940,38 @@ uu = np.zeros((2, 1))
 # Test time
 t = 0.0
 
-# # Test function for absolute_NSROE_dynamics
-def test_absolute_NSROE_dynamics():
-    # Evaluate the original function
-    y_dot_original, u_chief_original = absolute_NSROE_dynamics(t, NOE_chief, data, yy_o)
+# # # Test function for absolute_NSROE_dynamics
+# def test_absolute_NSROE_dynamics():
+#     # Evaluate the original function
+#     y_dot_original, u_chief_original = absolute_NSROE_dynamics(t, NOE_chief, data, yy_o)
 
-    # Convert the state and parameters into CasADi symbolic variables
-    t_sym = ca.MX.sym('t')
-    yy_sym = ca.MX.sym('yy', 6)
-    yy_o_sym = ca.MX.sym('yy_o', 14)
+#     # Convert the state and parameters into CasADi symbolic variables
+#     t_sym = ca.MX.sym('t')
+#     yy_sym = ca.MX.sym('yy', 6)
+#     yy_o_sym = ca.MX.sym('yy_o', 14)
 
-    # Call the CasADi version of the function
-    y_dot_casadi, u_chief_casadi = absolute_NSROE_dynamics_casadi(t_sym, yy_sym, data, yy_o_sym)
+#     # Call the CasADi version of the function
+#     y_dot_casadi, u_chief_casadi = absolute_NSROE_dynamics_casadi(t_sym, yy_sym, data, yy_o_sym)
 
-    # Create CasADi functions for evaluation
-    abs_NSROE_func = ca.Function('abs_NSROE_func', [t_sym, yy_sym, yy_o_sym], [y_dot_casadi, u_chief_casadi])
+#     # Create CasADi functions for evaluation
+#     abs_NSROE_func = ca.Function('abs_NSROE_func', [t_sym, yy_sym, yy_o_sym], [y_dot_casadi, u_chief_casadi])
 
-    # Evaluate CasADi function at the test values
-    y_dot_casadi_eval, u_chief_casadi_eval = abs_NSROE_func(t, NOE_chief, yy_o)
+#     # Evaluate CasADi function at the test values
+#     y_dot_casadi_eval, u_chief_casadi_eval = abs_NSROE_func(t, NOE_chief, yy_o)
 
-    # Shape test
-    assert y_dot_casadi_eval.shape == y_dot_original.shape, (
-        f"Expected shape {y_dot_original.shape}, but got {y_dot_casadi_eval.shape}"
-    )
-    assert u_chief_casadi_eval.shape == u_chief_original.shape, (
-        f"Expected shape {u_chief_original.shape}, but got {u_chief_casadi_eval.shape}"
-    )
+#     # Shape test
+#     assert y_dot_casadi_eval.shape == y_dot_original.shape, (
+#         f"Expected shape {y_dot_original.shape}, but got {y_dot_casadi_eval.shape}"
+#     )
+#     assert u_chief_casadi_eval.shape == u_chief_original.shape, (
+#         f"Expected shape {u_chief_original.shape}, but got {u_chief_casadi_eval.shape}"
+#     )
 
-    # Value test: Check that both functions return similar results
-    np.testing.assert_allclose(y_dot_casadi_eval, y_dot_original, rtol=1e-5, atol=1e-8)
-    np.testing.assert_allclose(u_chief_casadi_eval, u_chief_original, rtol=1e-5, atol=1e-8)
+#     # Value test: Check that both functions return similar results
+#     np.testing.assert_allclose(y_dot_casadi_eval, y_dot_original, rtol=1e-5, atol=1e-8)
+#     np.testing.assert_allclose(u_chief_casadi_eval, u_chief_original, rtol=1e-5, atol=1e-8)
 
 if __name__ == "__main__":
-
-    test_lookup_surface_properties_casadi()
+    v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
+    test_calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA)
 

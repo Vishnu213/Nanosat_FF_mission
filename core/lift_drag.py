@@ -19,17 +19,25 @@ def normalize(v):
 
 def lookup_surface_properties(angle, poly_coeffs):
     surfaces_data = []
-    
+    print(" GOOOOOOOOOOOOOOO ")
     for surface, coeffs in poly_coeffs.items():
         normal_x = np.polyval(coeffs['normal_x'], angle)
         normal_y = np.polyval(coeffs['normal_y'], angle)
         normal_z = np.polyval(coeffs['normal_z'], angle)
         projected_area = np.polyval(coeffs['area'], angle)
 
+        print("##############")
+        print("normal_x",normal_x)
+        print("normal_y",normal_y)
+        print("normal_z",normal_z)
+        print("projecteted area",projected_area)
         # If the projected area is positive, include the surface in the results
+        print("##############")
+        print("projecteted area_python",projected_area)
         if projected_area > 0:
             surfaces_data.append([normal_x, normal_y, normal_z, projected_area])
-
+    print("##############")
+    print("surfaces_data",surfaces_data)
     return np.array(surfaces_data)
 
 # Function to calculate drag and lift for a given spacecraft
@@ -152,7 +160,8 @@ def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
     
     # Calculate drag and lift for the spacecraft
     a_drag, a_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T , entity_data,AOA)
-    
+    print("a_drag",a_drag)
+    print("a_lift",a_lift)
     return a_drag, a_lift
 
 # Main function to compute forces for multiple spacecraft
