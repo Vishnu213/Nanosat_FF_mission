@@ -126,6 +126,9 @@ from lift_drag import compute_forces_for_entities  # Python version
 from dynamics import absolute_NSROE_dynamics
 from converted_functions import absolute_NSROE_dynamics_casadi
 
+from constrains import con_chief_deputy_angle  
+from converted_functions import con_chief_deputy_angle_casadi
+
 tolerance = 1e-11
 
 def test_M2theta():
@@ -1081,36 +1084,122 @@ from TwoBP import NSROE2LVLH  # Make sure the import path is correct
 from converted_functions import NSROE2LVLH_casadi  # Make sure the import path is correct
 
 def test_NSROE2LVLH_casadi():
-    # Test inputs
-    NSROE_test = np.array([7000, 0.1, np.deg2rad(45), 0.01, 0.02, np.deg2rad(30)])
-    NSOE0_test = np.array([6800, 0.01, np.deg2rad(30), 0.01, 0.02, np.deg2rad(45)])
-    data_test = {
-        "Primary": [398600.4418, 6378.137, 7.2921150e-5],
-        "J": [1.08262668e-3, 0, 0],
-        "S/C": [300, 2, 0.9, 300]
+    data = {
+        "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
+
+        # Satellites data including chief and deputies
+        "satellites": {
+            "chief": {
+                "mass": 300,         # Mass in kg
+                "area": 2,           # Cross-sectional area in m^2
+                "C_D": 0.9,          # Drag coefficient
+            },
+            "deputy_1": {
+                "mass": 250,
+                "area": 1.8,
+                "C_D": 0.85,
+            }
+        },
+        "N_deputies": 2,  # Number of deputies
+        "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
+
     }
 
+    # Initial conditions for NOE_chief and yy_o from the reference script
+    deg2rad = np.pi / 180
+    NSOE0_test = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
+    yaw_c_d = np.array([0.12, 0.08])
+
+    NSROE_test = Param2NROE(NSOE0_test, np.array([ 0,-0.40394247,0,0,np.pi/2,0]), data)
+    print("RNOE_0",NSROE_test)
+    print("NOE_chief",NSOE0_test)
+    yy = np.concatenate((NSROE_test, NSOE0_test, yaw_c_d))
     # Original function result
-    rr_np = NSROE2LVLH(NSROE_test, NSOE0_test, data_test)
+    rr_np = NSROE2LVLH(NSROE_test, NSOE0_test, data)
 
     # CasADi function result
     NSROE_sym = ca.SX.sym('NSROE', 6)
     NSOE0_sym = ca.SX.sym('NSOE0', 6)
-    rr_casadi_sym = NSROE2LVLH_casadi(NSROE_sym, NSOE0_sym, data_test)
+    rr_casadi_sym = NSROE2LVLH_casadi(NSROE_sym, NSOE0_sym, data)
 
     # Create a CasADi function
     rr_casadi_func = ca.Function('rr_casadi_func', [NSROE_sym, NSOE0_sym], [rr_casadi_sym])
 
     # Evaluate the CasADi function with numeric values
-    rr_casadi = rr_casadi_func(NSROE_test, NSOE0_test).full().flatten()
+    rr_casadi = rr_casadi_func(ca.DM(NSROE_test), ca.DM(NSOE0_test)).full().flatten()
     print("Python result:", rr_np)
     print("CasADi result:", rr_casadi)
     # Compare the results
     assert rr_casadi == approx(rr_np, abs=1e-11), f"NumPy: {rr_np}, CasADi: {rr_casadi}"
+
+
+def test_con_chief_deputy_angle():
+# Parameters that is of interest to the problem
+
+    data = {
+        "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
+
+        # Satellites data including chief and deputies
+        "satellites": {
+            "chief": {
+                "mass": 300,         # Mass in kg
+                "area": 2,           # Cross-sectional area in m^2
+                "C_D": 0.9,          # Drag coefficient
+            },
+            "deputy_1": {
+                "mass": 250,
+                "area": 1.8,
+                "C_D": 0.85,
+            }
+        },
+        "N_deputies": 2,  # Number of deputies
+        "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
+
+    }
+
+    # Initial conditions for NOE_chief and yy_o from the reference script
+    deg2rad = np.pi / 180
+    NOE_chief = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
+    yaw_c_d = np.array([0.12, 0.08])
+
+    RNOE_0 = Param2NROE(NOE_chief, np.array([ 0,-0.40394247,0,0,np.pi/2,0]), data)
+    print("RNOE_0",RNOE_0)
+    yy = np.concatenate((RNOE_0, NOE_chief, yaw_c_d))
+
+
+    # Original NumPy function output
+    original_angle = con_chief_deputy_angle(yy, data)
+    print("yy",yy.shape[0])
+    # CasADi function input (convert to MX)
+    yy_casadi = ca.MX.sym('yy', yy.shape[0],1)
+    
+    # CasADi function output
+    casadi_ang = con_chief_deputy_angle_casadi(yy_casadi, data)
+    
+    ca_func = ca.Function('con_chief_deputy_angle', [yy_casadi], [casadi_ang])
+    casadi_angle_val = ca_func(ca.DM(yy)).full().flatten()
+    print("Python result:", original_angle)
+    print("CasADi result:", casadi_angle_val)
+    print("Python shape:", original_angle.shape)
+    print("CasADi shape:", casadi_angle_val.shape)
+    # Test the shape
+    assert casadi_angle_val.shape[0] == 1, "Shape mismatch between original and CasADi outputs"
+
+    # Test the value within a tolerance
+    original_angle_val = original_angle
+    casadi_angle_val = casadi_angle_val  # Convert CasADi output to NumPy array
+    np.testing.assert_allclose(original_angle_val, casadi_angle_val, rtol=1e-11, atol=1e-11)
+
 
 if __name__ == "__main__":
     # data, loaded_polynomials, alpha_list, vv, rr=get_test_data_multiple_entities()
     # # v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
     # test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
 
-    test_Dynamics_casadi()
+    # test_Dynamics_casadi()
+    # # test_con_chief_deputy_angle()
+    # test_NSROE2LVLH_casadi()
+
+    test_con_chief_deputy_angle()

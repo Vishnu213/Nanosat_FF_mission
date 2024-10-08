@@ -505,12 +505,12 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
     spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
     Area = data["S/C"][1]  # Cross-sectional area (m^2)
     
-    print("eqweqweweqwe",surface_properties.shape)
+    #print("eqweqweweqwe",surface_properties.shape)
     surface_splits = ca.vertsplit(surface_properties, 1)
     for surface in surface_splits:
 
         surface = ca.reshape(surface, 4, 1)
-        print("surface",surface.shape)
+        #print("surface",surface.shape)
         normal_vector = ca.MX(surface[0:3])  # Extract normal vector
         projected_area = surface[3]  # Extract projected area
         
@@ -519,8 +519,8 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
         # Set projected_area to 404 if surface_properties is zero
         projected_area = ca.if_else(ca.sum1(surface) == 0, ca.MX.ones(1)*404, projected_area)
         temp = ca.MX.ones(3)*404
-        print("projected_area",projected_area.shape)
-        print("normal_vector",normal_vector.shape, temp.shape)
+        #print("projected_area",projected_area.shape)
+        #print("normal_vector",normal_vector.shape, temp.shape)
         normal_vector = ca.if_else(ca.sum1(surface) == 0, ca.MX.ones(3)*404, normal_vector)
 
         S_i = projected_area  # Area of the plate (m^2)
@@ -557,8 +557,8 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
 
         a_drag_total += a_drag / spacecraft_mass
         a_lift_total += a_lift / spacecraft_mass
-        # print("a_drag_total",a_drag_total.shape)
-        # print("a_lift_total",a_lift_total.shape)
+        # #print("a_drag_total",a_drag_total.shape)
+        # #print("a_lift_total",a_lift_total.shape)
 
     return a_drag_total, a_lift_total
 
@@ -646,7 +646,7 @@ def casadi_polyval(coeffs, x):
 #     # Remove any zero rows (all-zero vectors) after evaluation (Ensure at least 4xN output)
 #     non_zero_surfaces = surfaces_concat_evaluated[~np.all(surfaces_concat_evaluated == 0, axis=1)]
     
-#     print(non_zero_surfaces)
+#     #print(non_zero_surfaces)
 
 #     return non_zero_surfaces
 
@@ -682,13 +682,13 @@ def casadi_polyval(coeffs, x):
 
 # # # # # #     # Evaluate the result for a specific numeric angle
 # # # # # #     surfaces_concat_evaluated = eval_function(ca.DM(angle_numeric)).full()
-# # # # # #     print(surfaces_concat_evaluated)
+# # # # # #     #print(surfaces_concat_evaluated)
 # # # # # #     # Remove columns with all zero values
 # # # # # #     non_zero_columns = surfaces_concat_evaluated[:, ~np.all(surfaces_concat_evaluated == 0, axis=0)]
-# # # # # #     print(non_zero_columns)
+# # # # # #     #print(non_zero_columns)
 # # # # # #     # Convert back to CasADi DM format
 # # # # # #     non_zero_surfaces_dm = ca.DM(non_zero_columns.transpose())
-# # # # # #     print(non_zero_surfaces_dm)
+# # # # # #     #print(non_zero_surfaces_dm)
 # # # # # #     return non_zero_surfaces_dm.T
 
 # Function that takes symbolic inputs and returns constant values
@@ -710,7 +710,7 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
 
     # Loop through each surface and evaluate polynomials symbolically
     for surface, coeffs in poly_coeffs.items():
-        print(f"\nProcessing surface: {surface}")
+        #print(f"\nProcessing surface: {surface}")
         
         # Manually evaluate polynomials symbolically using CasADi for each component
         normal_x = sum(c * angle**i for i, c in enumerate(reversed(coeffs['normal_x'])))
@@ -718,18 +718,18 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
         normal_z = sum(c * angle**i for i, c in enumerate(reversed(coeffs['normal_z'])))
         projected_area = sum(c * angle**i for i, c in enumerate(reversed(coeffs['area'])))
 
-        print(f"normal_x: {normal_x}, normal_y: {normal_y}, normal_z: {normal_z}, projected_area: {projected_area}")
+        #print(f"normal_x: {normal_x}, normal_y: {normal_y}, normal_z: {normal_z}, projected_area: {projected_area}")
 
         # Add the result to surfaces_data (CasADi symbolic expressions)
         surfaces_data.append(ca.vertcat(normal_x, normal_y, normal_z, projected_area))
 
     # Stack all symbolic surfaces into a single matrix (4xN)
     surfaces_concat = ca.horzcat(*surfaces_data)
-    print(f"Concatenated surfaces matrix (4xN):\n{surfaces_concat}")
+    #print(f"Concatenated surfaces matrix (4xN):\n{surfaces_concat}")
 
     # Extract the projected areas (4th row)
     projected_areas = surfaces_concat[3, :]
-    print(f"Projected areas before filtering: {projected_areas}")
+    #print(f"Projected areas before filtering: {projected_areas}")
 
     # Initialize an empty MX matrix for filtered surfaces
     filtered_surfaces = ca.MX.zeros(4, 0)
@@ -737,22 +737,22 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
     # Loop through each column and apply filtering based on projected_area
     for i in range(surfaces_concat.shape[1]):
         surface_i = surfaces_concat[:, i]
-        print(f"\nChecking surface {i} with projected_area: {projected_areas[i]}")
+        #print(f"\nChecking surface {i} with projected_area: {projected_areas[i]}")
         
         # Condition for strictly positive projected_area
         condition = projected_areas[i] > 0
-        print(f"Condition for projected_area > 0: {condition}")
+        #print(f"Condition for projected_area > 0: {condition}")
         
         # Use ca.if_else to filter the valid surface
         filtered_surface = ca.if_else(condition, surface_i, ca.MX.zeros(4, 1))
-        print(f"Filtered surface {i} (after applying condition): {filtered_surface}")
+        #print(f"Filtered surface {i} (after applying condition): {filtered_surface}")
 
         # Concatenate filtered surfaces (start with an empty matrix)
         filtered_surfaces = ca.horzcat(filtered_surfaces, filtered_surface)
 
-    # Print the size of the final filtered surfaces matrix
-    print("Filtered non-zero surfaces size:", filtered_surfaces.shape)
-    print(f"Filtered surfaces matrix:\n{filtered_surfaces}")
+    # #print the size of the final filtered surfaces matrix
+    #print("Filtered non-zero surfaces size:", filtered_surfaces.shape)
+    #print(f"Filtered surfaces matrix:\n{filtered_surfaces}")
 
     # Sum each column
     column_sums = ca.sum1(ca.fabs(filtered_surfaces))  # Summing the absolute values of each column
@@ -766,8 +766,8 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
         # Use CasADi's conditional approach to build the new matrix
         filtered_matrix = ca.horzcat(filtered_matrix, ca.if_else(non_zero_columns_mask[i], filtered_surfaces[:, i], ca.MX.zeros(4, 1)))
     
-    print(f"Filtered non-zero surfaces matrix:\n{filtered_matrix}")
-    print("Filtered non-zero surfaces size:", filtered_matrix.shape)
+    #print(f"Filtered non-zero surfaces matrix:\n{filtered_matrix}")
+    #print("Filtered non-zero surfaces size:", filtered_matrix.shape)
     return ca.transpose(filtered_matrix)
 
 # # # # Main function for looking up surface properties
@@ -817,9 +817,9 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
     
 # # # # # #     spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
 # # # # # #     Area = data["S/C"][1]  # Cross-sectional area (m^2)  
-# # # # # #     print("surface_properties:", surface_properties)
+# # # # # #     #print("surface_properties:", surface_properties)
 # # # # # #     # Ensure that surface_properties is in the correct shape (4xN)
-# # # # # #     print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", surface_properties.shape, surface_properties.shape[1] == 4)
+# # # # # #     #print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", surface_properties.shape, surface_properties.shape[1] == 4)
 # # # # # #     assert surface_properties.shape[1] == 4, "Each surface should have 4 components (normal_x, normal_y, normal_z, projected_area)"
     
 # # # # # #     # Iterate through surface properties using horzsplit to split into individual surfaces
@@ -954,30 +954,30 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
     for i in range(num_entities):
         # Extract the velocity, position, and angle of attack for each entity
 
-        print("vvsdsdsd",vv.shape)
-        print(rr.shape)
+        #print("vvsdsdsd",vv.shape)
+        #print(rr.shape)
         v1 = vv[i,:]
         r1 = rr[i,:]
         # v1=ca.reshape(v1,3,1)
         # r1=ca.reshape(r1,3,1)
-        print(vv.shape[0]==2, vv.shape[0]==3)
+        #print(vv.shape[0]==2, vv.shape[0]==3)
         if vv.shape[0] == 3:
             v_rel = vv 
             r = rr
-            print("v_rel:",v_rel.shape)
+            #print("v_rel:",v_rel.shape)
         else:
             v_rel=ca.reshape(v1,3,1)
             r=ca.reshape(r1,3,1)
 
-        # print(v1.shape)
-        # print(r1.shape)
-        # print(vv.shape[0]==2)
+        # #print(v1.shape)
+        # #print(r1.shape)
+        # #print(vv.shape[0]==2)
         # # Use CasADi logic to reshape vectors to 3x1 if they are not in that shape
         # v_rel = ca.if_else(vv.shape[0] == 3, vv,v1)
         # r = ca.if_else(rr.shape[0] == 3, rr, r1)
 
-        print(v_rel.shape)
-        print(r.shape)
+        #print(v_rel.shape)
+        #print(r.shape)
         
         #reshape the velocity and position vectors
         v_rel = ca.reshape(v_rel, 3, 1)
@@ -988,8 +988,8 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
         # Compute aerodynamic forces for each spacecraft using the CasADi version
         a_drag, a_lift = compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, v_rel, r)
 
-        print(C1_casadi(AOA).shape)
-        print(ca.vertcat(a_drag, a_lift).shape)
+        #print(C1_casadi(AOA).shape)
+        #print(ca.vertcat(a_drag, a_lift).shape)
         # Ensure a_drag and a_lift are column vectors (3x1)
         a_drag = ca.reshape(a_drag, 3, 1)
         a_lift = ca.reshape(a_lift, 3, 1)
@@ -1000,8 +1000,8 @@ def compute_forces_for_entities_casadi(entity_data, loaded_polynomials, alpha_li
 
 
         force_sum = a_drag + a_lift
-        print(C1_casadi(AOA).shape)
-        print("AAAAAAAAAAAAAAA",force_sum.shape)
+        #print(C1_casadi(AOA).shape)
+        #print("AAAAAAAAAAAAAAA",force_sum.shape)
         # Transform the forces into LVLH frame
         rel_f = ca.mtimes(C1_casadi(AOA), force_sum)  # Combine and rotate drag and lift
 
@@ -1193,8 +1193,8 @@ def absolute_NSROE_dynamics_casadi(t, yy, param, yy_o):
     rr_1 = ca.vertcat(rr)
     vv_1 = ca.vertcat(vv)
 
-    print("rr_1.shape:", rr_1.shape)
-    print("vv_1.shape:", vv_1.shape)
+    #print("rr_1.shape:", rr_1.shape)
+    #print("vv_1.shape:", vv_1.shape)
     # Compute forces for the chief using CasADi version
     u_chief = compute_forces_for_entities_casadi(data, loaded_polynomials, yy_o[12:13], vv_1, rr_1)
 
@@ -1256,10 +1256,8 @@ def Dynamics_casadi(t, yy, param, uu):
 import casadi as ca
 
 def NSROE2LVLH_casadi(NSROE, NSOE0, data):
-
     # Extract data parameters
     mu = data["Primary"][0]
-    J2 = data["J"][0]
 
     # State variables from NSOE0
     a = NSOE0[0]
@@ -1285,30 +1283,81 @@ def NSROE2LVLH_casadi(NSROE, NSOE0, data):
     n = ca.sqrt(mu / (a**3))
 
     # Calculate u and r based on whether e is zero or not
-    u = ca.if_else(e == 0, l, 0)  # If eccentricity is zero, use l as u
-    omega_peri = ca.if_else(e == 0, 0, ca.acos(q1 / e))
-    mean_anamoly = l - omega_peri
-    theta_tuple = M2theta_casadi(mean_anamoly, e, 1e-8)
+    omega_peri = ca.if_else(e > 1e-6, ca.acos(q1 / e), 0)  # Handle near-zero eccentricity case
+    mean_anomaly = l - omega_peri
+    theta_tuple = M2theta_casadi(mean_anomaly, e, 1e-8)
     theta = theta_tuple[0]
-    u = ca.if_else(e == 0, u, theta + omega_peri)  # If eccentricity is not zero, use theta + omega_peri
+    u = ca.if_else(e > 1e-6, theta + omega_peri, l)  # If eccentricity is not zero, use theta + omega_peri
+
     r = (a * eta**2) / (1 + (q1 * ca.cos(u)) + (q2 * ca.sin(u)))
 
-    e1 = (a / eta) * ca.sqrt((1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
-                      - ((q1 * delta_q1 + q2 * delta_q2)**2) + delta_q1**2 + delta_q2**2)
+    # Now calculate e1, e2, e3, alpha_0, beta_0
+    delta_lambda_term = (1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
+    delta_q_term = (delta_q1**2 + delta_q2**2 - (q1 * delta_q1 + q2 * delta_q2)**2)
 
+    test_1 = (a / eta)
+    test_2 = (1 - eta**2) * delta_lambda0**2
+    test_3 = 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
+    test_4 = (delta_q1**2 + delta_q2**2)
+    test_5 = (q1 * delta_q1 + q2 * delta_q2)**2
+    test_6 = ca.if_else((test_2 + test_3 + test_4 - test_5)>0,(test_2 + test_3 + test_4 - test_5),-(test_2 + test_3 + test_4 - test_5))
+    
+
+
+    e1 =(a / eta) * ca.sqrt(test_6)
+    
     e2 = p * (delta_Omega * ca.cos(i) + ((1 + eta + eta**2) / (eta**3 * (1 + eta))) * (q2 * delta_q1 - q1 * delta_q2)
-              + (1 / eta**3) * delta_lambda0)
+        + (1 / eta**3) * delta_lambda0)
 
     e3 = p * ca.sqrt(delta_i**2 + delta_Omega**2 * ca.sin(i)**2)
 
+
+    # Calculate alpha_0 and beta_0
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
     alpha_denominator = (1 + eta) * (delta_q2 - q1 * delta_lambda0) - q2 * (q1 * delta_q1 + q2 * delta_q2)
     alpha_0 = ca.atan2(alpha_numerator, alpha_denominator)
 
     beta_0 = ca.atan2(-delta_Omega * ca.sin(i), delta_i)
 
+    # Calculate x_p, y_p, z_p
     x_p = (e1 / p) * ca.sin(u + alpha_0) * (1 + q1 * ca.cos(u) + q2 * ca.sin(u))
     y_p = (e1 / p) * ca.cos(u + alpha_0) * (2 + q1 * ca.cos(u) + q2 * ca.sin(u)) + (e2 / p)
     z_p = (e3 / p) * ca.sin(u + beta_0)
 
     return r * ca.vertcat(x_p, y_p, z_p)
+
+
+
+
+def con_chief_deputy_angle_casadi(yy, data):
+
+    NSROE = yy[0:6]
+    NSOE0 = yy[6:12]
+    alpha = yy[12]
+    #print("alpha", alpha)
+
+    range = np.array([0,-1,0])
+    range_sym = ca.MX(range)
+
+    # CasADi-based calculations
+    x_deputy = NSROE2LVLH_casadi(NSROE, NSOE0, data)
+    rr, vv = NSROE2car_casadi(NSOE0, data)
+    rel_f = ca.mtimes(C1_casadi(alpha), range_sym)
+    rel_f = ca.reshape(rel_f, 3, 1)
+    x_r = ca.mtimes(Frenet2LVLH_casadi(rr, vv), rel_f)
+    x_d = x_r - x_deputy
+
+    # Magnitudes
+    x_r_mag = ca.norm_2(x_r)
+    x_d_mag = ca.norm_2(x_d)
+    x_deputy_mag = ca.norm_2(x_deputy)
+
+
+    # Calculate angle using the cosine rule
+    cos_theta = (x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2 * x_deputy_mag * x_d_mag)
+    angle_con = ca.acos(cos_theta)
+    # Debug point: Check cos_theta
+
+
+    # return angle_con
+    return angle_con

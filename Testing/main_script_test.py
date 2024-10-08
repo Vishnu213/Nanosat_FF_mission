@@ -41,6 +41,7 @@ from TwoBP import (
 
 from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics
 from constrains import con_chief_deputy_angle
+from integrators import integrate_system
 
 
 # Parameters that is of interest to the problem
@@ -119,7 +120,7 @@ else:
 rho_1 = 0 # [m]  - radial separation 
 rho_3 =0 # [m]  - cross-track separation
 alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
-beta = 0#alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
+beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0 #-10 # Drift per revolutions m/resolution
 d= -1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
@@ -172,9 +173,12 @@ print("Integration starting....")
 # Start the timer
 start_time = time.time()
 
-sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-                        method='DOP853',args=(data,uu), rtol=1e-10, atol=1e-12,dense_output=True)
+# sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
+#                         method='DOP853',args=(data,uu), rtol=1e-10, atol=1e-12,dense_output=True)
 
+h=10 * (teval[2]-teval[1])
+print("Time step......h : ",h)
+t_values, sol_y = integrate_system("RK4", Dynamics,teval, yy_o,h, data, uu)
 # End the timer
 end_time = time.time()
 
@@ -187,23 +191,27 @@ print(f"Time taken for integration: {execution_time:.4f} seconds")
 print("Integration done....")
 
 # Convert from NROE to Carterian co-ordinates. 
-rr_s=numpy.zeros((3,len(sol.y[0])))
-vv_s=numpy.zeros((3,len(sol.y[0])))
+rr_s=numpy.zeros((3,len(sol_y[0])))
+vv_s=numpy.zeros((3,len(sol_y[0])))
+angle_con_array=numpy.zeros((len(sol_y[0])))
 
-for i in range(0,len(sol.y[0])):
-    # if sol.y[5][i]>2*numpy.pi:
-    #     sol.y[5][i]= 
+for i in range(0,len(sol_y[0])):
+    # if sol_y[5][i]>2*numpy.pi:
+    #     sol_y[5][i]= 
  
-    # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
-    #                                            sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
+    # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol_y[0][i],sol_y[1][i],sol_y[2][i],
+    #                                            sol_y[3][i],sol_y[4][i],sol_y[5][i]]),data)
     
-    yy1=sol.y[0:6,i]
-    yy2=sol.y[6:12,i]
+    yy1=sol_y[0:6,i]
+    yy2=sol_y[6:12,i]
     if yy2[1]>2000:
         print("ANOMALY",yy2[1])
-    
+    print("yy1",yy1)
+    print("yy2",yy2)
     rr_s[:,i]=NSROE2LVLH(yy1,yy2,data)
-    angle_con=con_chief_deputy_angle(sol.y[:,i],data)
+    angle_con=con_chief_deputy_angle(sol_y[:,i],data)
+    angle_con_array[i] = angle_con
+
     print("############# constains angle", angle_con)
 
     # h = COE[0]
@@ -362,28 +370,28 @@ axs[2].set_title('z')
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[0])
+axs[0].plot(teval, sol_y[0])
 axs[0].set_title('semi major axis')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[1])
+axs[1].plot(teval, sol_y[1])
 axs[1].set_title('mean true latitude')
 
-axs[2].plot(teval, sol.y[2])
+axs[2].plot(teval, sol_y[2])
 axs[2].set_title('inclination')
  
 
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[3])
+axs[0].plot(teval, sol_y[3])
 axs[0].set_title('q1')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[4])
+axs[1].plot(teval, sol_y[4])
 axs[1].set_title('q2')
 
-axs[2].plot(teval, sol.y[5])
+axs[2].plot(teval, sol_y[5])
 axs[2].set_title('right ascenstion of ascending node')
 
 
@@ -424,12 +432,15 @@ plt.title('Plot of x vs z')
 fig, axs = plt.subplots(3, 1)
 
 # Plot data on the first subplot
-axs[0].plot(teval, sol.y[12])
+axs[0].plot(teval, sol_y[12])
 axs[0].set_title('Chief yaw angle')
 
 # Plot data on the second subplot
-axs[1].plot(teval, sol.y[13])
+axs[1].plot(teval, sol_y[13])
 axs[1].set_title('Deputy 1 yaw angle')
+
+axs[2].plot(teval, angle_con_array)
+axs[2].set_title('Constrains angle')
 
 
 plt.show()

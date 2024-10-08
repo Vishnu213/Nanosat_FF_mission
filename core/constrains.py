@@ -23,14 +23,15 @@ def con_chief_deputy_angle(yy,data):
     x_d_mag = np.linalg.norm(x_d)
     x_deputy_mag = np.linalg.norm(x_deputy)
     angle_con = np.arccos((x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2*x_deputy_mag*x_d_mag))
-    # print("innerrrr", (x_deputy_mag**2 + x_d_mag**2 - x_r_mag) / (x_deputy_mag*x_d_mag))
-    # print("X_D", x_d_mag)
-    # print("X_R", x_r_mag)
-    # print("X_DEPUTY", x_deputy_mag)
-    # print("ANGLE", angle_con)
-    # print("X_R", x_r)
-    # print("X_D", x_d)
-    # print("X_DEPUTY", x_deputy)
+    print("###########################################")
+    print("innerrrr", (x_deputy_mag**2 + x_d_mag**2 - x_r_mag) / (x_deputy_mag*x_d_mag))
+    print("X_D", x_d_mag)
+    print("X_R", x_r_mag)
+    print("X_DEPUTY", x_deputy_mag)
+    print("ANGLE", angle_con)
+    print("X_R", x_r)
+    print("X_D", x_d)
+    print("X_DEPUTY", x_deputy)
 
     try:
         assert np.isnan(angle_con)==False, "Angle is greater than 180 degrees"

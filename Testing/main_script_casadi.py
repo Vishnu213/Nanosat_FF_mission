@@ -38,8 +38,10 @@ import sys
 import pickle
 
 # Import the CasADi versions of the functions you've converted
-from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi
+from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
 from TwoBP import Param2NROE, M2theta
+
+
 deg2rad = np.pi / 180
 # Parameters (same as the Python version)
 param = {
@@ -59,7 +61,13 @@ param = {
     },
     "N_deputies": 2,
     "sat": [1.2, 1.2, 1.2],  # Moments of inertia
+
+    # New fields
+    "T_MAX": 23e-6,  # Nm
+    "PHI_DOT": 0.1* (np.pi / 180),  # rad/s
+    "PHI": 90 * (np.pi / 180)  # Convert 90 degrees to radians
 }
+
 
 print("Parameters initialized.")
 
@@ -188,13 +196,16 @@ print("Integrated states shape:", integrated_states.shape)
 
 # Generate the LVLH Frame positions from CasADi results
 rr_s = np.zeros((3, len(teval)))
-
+angle_con_array=numpy.zeros((len(teval)))
 # For each time step, compute the position
 for i in range(len(teval)):
     yy1 = integrated_states[0:6,i]  # Deputy NSROE
     yy2 = integrated_states[6:12,i]  # Chief NSROE
     rr_s[:, i] = NSROE2LVLH_casadi(yy1, yy2, param).full().flatten()
-    print("rr_s:", rr_s[:, i])
+    angle_con=con_chief_deputy_angle_casadi(integrated_states[:,i],param)
+    # print("angle_con",)    
+    angle_con_array[i] = ca.evalf(angle_con)
+    # print("rr_s:", rr_s[:, i])
 
 # Set the limits to 1 km for each axis
 x_limits = [-0.5, 1.5]  # 1 km range centered at 0
@@ -360,5 +371,7 @@ axs[0].set_title('Chief yaw angle')
 axs[1].plot(teval, integrated_states[13])
 axs[1].set_title('Deputy 1 yaw angle')
 
+axs[2].plot(teval, angle_con_array)
+axs[2].set_title('Constrains angle')
 
 plt.show()

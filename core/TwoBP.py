@@ -1248,6 +1248,19 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     e1 =(a / eta) * ((1 - eta**2) * delta_lambda0**2 + 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
         - ((q1 * delta_q1 + q2 * delta_q2)**2) + delta_q1**2 + delta_q2**2)**0.5
 
+    test_1 = (a / eta)
+    test_2 = (1 - eta**2) * delta_lambda0**2
+    test_3 = 2 * (q2 * delta_q1 - q1 * delta_q2) * delta_lambda0
+    test_4 = (delta_q1**2 + delta_q2**2)
+    test_5 = (q1 * delta_q1 + q2 * delta_q2)**2
+    test_6 = (test_2 + test_3 + test_4 - test_5)
+    print("test_1",test_1)
+    print("test_2",test_2)
+    print("test_3",test_3)
+    print("test_4",test_4)
+    print("test_5",test_5)
+    print("test_6",test_6)
+    
 
     e2 = p * (delta_Omega * numpy.cos(i) + ( (1 + eta + eta**2) / (eta**3 * (1 + eta)) ) * (q2 * delta_q1 - q1 * delta_q2) 
         + (1 / eta**3) * delta_lambda0 )
@@ -1255,6 +1268,9 @@ def NSROE2LVLH(NSROE,NSOE0,data):
 
     e3 =   p * ((delta_i**2) + (delta_Omega**2) * (numpy.sin(i)**2))**0.5
 
+    print("e1",e1)
+    print("e2",e2)
+    print("e3",e3)
 
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
     
