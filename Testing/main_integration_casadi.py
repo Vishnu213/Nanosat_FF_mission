@@ -20,7 +20,7 @@ if module_path_casadi_converter not in sys.path:
     sys.path.append(module_path_casadi_converter)
 
 # Load the CasADi versions of the functions you've converted
-from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi, Dynamics_with_PID_casadi
 from TwoBP import Param2NROE, M2theta, NSROE2LVLH
 from dynamics import Dynamics
 from constrains import con_chief_deputy_angle
@@ -60,6 +60,9 @@ def path_constraints_casadi(t,xk, uk, param, lower, upper):
     d_koz = 0.3  # Distance threshold for collision avoidance
     collision_avoidance = d_koz - r  # d_koz < r  --> d_koz - r <= 0
 
+    # angle constraint
+    phi_deputy = con_chief_deputy_angle_casadi(xk, param)
+
     # Yaw rate constraints
     lb_phi_dot = param["PHI_DOT"][0]
     ub_phi_dot = param["PHI_DOT"][1]
@@ -97,14 +100,15 @@ def path_constraints_casadi(t,xk, uk, param, lower, upper):
 
     # Combine all path constraints into one vector
     path_constraints = ca.vertcat(
-        constraint_r_lower,    # Enforce lower bound on relative distance
-        constraint_r_upper,    # Enforce upper bound on relative distance
-        collision_avoidance,   # Enforce collision avoidance
-        yaw_rate_constraints,  # Enforce yaw rate constraints
-        control_constraints,   # Enforce control input constraints
-        phi_constraints        # Enforce yaw angle constraints
+        phi_deputy,    # Enforce angle constraint
+        # constraint_r_lower,    # Enforce lower bound on relative distance
+        # constraint_r_upper,    # Enforce upper bound on relative distance
+        # collision_avoidance,   # Enforce collision avoidance
+        # yaw_rate_constraints,  # Enforce yaw rate constraints
+        # control_constraints,   # Enforce control input constraints
+        # phi_constraints        # Enforce yaw angle constraints
     )
-    print("path_constraints",path_constraints.shape)
+    print("path_constraints_CASADI",path_constraints.shape)
     
     return path_constraints
 
@@ -121,9 +125,10 @@ def dae_system(t, yy, param, uu, lower, upper):
     dynamics = Dynamics_casadi(t, yy, param, uu)
     
     # Path constraints
-    path_constraints_val = path_constraints_casadi(t,t,yy, uu, param, lower, upper)
-
-    return ca.vertcat(dynamics, path_constraints_val)
+    # path_constraints_val = path_constraints_casadi(t,t,yy, uu, param, lower, upper)
+    path_constraints_val = con_chief_deputy_angle_casadi(yy, param)
+    
+    return dynamics#ca.vertcat(dynamics, path_constraints_val)
 
 
 def path_constraints_numeric(t, xk, uk, param, lower, upper):
@@ -160,6 +165,8 @@ def path_constraints_numeric(t, xk, uk, param, lower, upper):
     # Collision avoidance constraint: r > d_koz
     d_koz = 0.3  # Distance threshold for collision avoidance
     collision_avoidance = d_koz - r  # d_koz < r  --> d_koz - r <= 0
+
+    phi_deputy = con_chief_deputy_angle(xk, param)
 
     # Yaw rate constraints
     lb_phi_dot = param["PHI_DOT"][0]
@@ -198,15 +205,16 @@ def path_constraints_numeric(t, xk, uk, param, lower, upper):
 
     # Combine all path constraints into one array
     path_constraints = np.concatenate([
-        [constraint_r_lower],    # Enforce lower bound on relative distance
-        [constraint_r_upper],    # Enforce upper bound on relative distance
-        [collision_avoidance],   # Enforce collision avoidance
-        yaw_rate_constraints,    # Enforce yaw rate constraints
-        control_constraints,     # Enforce control input constraints
-        phi_constraints          # Enforce yaw angle constraints
+        [phi_deputy],            # Enforce angle constraint
+        # [constraint_r_lower],    # Enforce lower bound on relative distance
+        # [constraint_r_upper],    # Enforce upper bound on relative distance
+        # [collision_avoidance],   # Enforce collision avoidance
+        # yaw_rate_constraints,    # Enforce yaw rate constraints
+        # control_constraints,     # Enforce control input constraints
+        # phi_constraints          # Enforce yaw angle constraints
     ])
     
-
+    print("path_constraints NUMERIC",path_constraints.shape)
 
     return path_constraints
 
@@ -231,7 +239,10 @@ param = {
     "sat": [1.2, 1.2, 1.2],  # Moments of inertia
     "T_MAX": 23e-6,  # Maximum torque (Nm)
     "PHI_DOT": [0.0, 0.1],  # Limits for yaw rate (rad/s)
-    "PHI": [-np.pi / 2, np.pi / 2]  # Limits for yaw angle (rad)
+    "PHI": [-np.pi / 2, np.pi / 2],  # Limits for yaw angle (rad)
+    "K_p": 5 * 1e-8,  # Proportional gain
+    "K_d": 1 * 1e-9, # Derivative gain
+    "K_i": 0.1* 1e-10,  # Integral gain
 }
 
 print("Parameters initialized.")
@@ -239,7 +250,7 @@ print("Parameters initialized.")
 deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad])
+NOE_chief = numpy.array([6600,0.1,45*deg2rad,0.5,0.2,45*deg2rad])
 print("Chief initial orbital elements set.")
 
 # Assigning the state variables
@@ -277,9 +288,9 @@ print("State variables assigned.")
 rho_1 = 0  # [m]  - radial separation 
 rho_3 = 0  # [m]  - cross-track separation
 alpha = 0  # [rad] - angle between the radial and along-track separation
-beta = 0  # [rad] - angle between the radial and cross-track separation
+beta = np.pi/2  # [rad] - angle between the radial and cross-track separation
 vd = 0  # Drift per revolutions m/resolution
-d = -1  # [m] - along track separation
+d = 10  # [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2)  # [m]  - along-track separation
 print("RHO_2", rho_2)
 print(d/1+e, d/1-e, d*(1/(2*(eta**2)) /(3-eta**2)))
@@ -292,23 +303,25 @@ RNOE_0 = Param2NROE(NOE_chief, parameters, param)
 print("Initial relative orbital elements calculated.")
 
 # Angle of attack for the deputy spacecraft
-yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_1 = 0.45  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
 yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
-yaw_2 = yaw_2_val
+yaw_2 = 0.2
 print("Yaw angles calculated, yaw_2:", yaw_2)
 yaw_c_d = numpy.array([yaw_1, yaw_2])
+
+PID_state = numpy.array([yaw_2_val-yaw_2, 0, 0])  # Initial PID state
 
 print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
 print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 
 # Statement matrix [RNOE_0, NOE_chief, yaw_c_d]
-yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
+yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d, PID_state))
 
 # TIME #################################################
-N_points = 100000
+N_points = 1000
 mu = param["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
-n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
+n_revol_T = 0.00005 * 365 * 24 * 60 * 60 / Torb
 n_revolution = n_revol_T
 T_total = n_revolution * Torb
 
@@ -358,20 +371,21 @@ print(f"Lower bound: {lower}, Upper bound: {upper}")
 
 
 # Define the state, control, and algebraic variables for the DAE system
-yy = ca.MX.sym('yy', 14)  # State vector
+yy = ca.MX.sym('yy', 17)  # State vector
 uu = ca.MX.sym('uu', 2)   # Control input vector
 t = ca.MX.sym('t', 1)     # Time variable
 
 print("tsdsdssssssssssssssssss",teval[0])
-alg = ca.MX.sym('alg', path_constraints_casadi(t,yy, uu, param, lower, upper).size()[0])  # Algebraic variables
+alg = ca.MX.sym('alg', 4) #ca.MX.sym('alg', path_constraints_casadi(t,yy, uu, param, lower, upper).size()[0])  # Algebraic variables
+print("ALGEBRAIC VARIABLES",alg.size()[0])
 t = ca.MX.sym('t', 1)     # Time variable
 # Set up the DAE system in CasADi
 dae = {
     'x': yy,  # State variables
     #'z': alg,  # Algebraic variables (for path constraints)
     'p': uu,  # Control inputs
-    'ode': Dynamics_casadi(t, yy, param, uu),  # Dynamics equations
-    #'alg': path_constraints_casadi(t,yy, uu, param, lower, upper)  # Algebraic path constraints
+    'ode':  Dynamics_with_PID_casadi(t, yy, param, uu)  # Dynamics equations
+    #'alg':  Dynamics_with_PID_casadi(t, yy, param, uu)[1]#path_constraints_casadi(t,yy, uu, param, lower, upper)  # Algebraic path constraints
 }
 
 # Define integration options
@@ -388,7 +402,8 @@ integrator = ca.integrator('integrator', 'idas', dae, integrator_options)
 
 # Initial conditions and control input
 yy0 = yy_o  # Initial state
-alg0 = path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
+alg0 =con_chief_deputy_angle(yy_o, param)#path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
+
 #print("Initial algebraic variables:", alg0)
 
 u0 = np.zeros(2)  # Initial control inputs
@@ -409,7 +424,10 @@ print("Integration complete.")
 # Extract the state trajectory (all x values over the time grid)
 solution_x = res['xf']  # This will give you the state values for each time step in the grid
 time_grid = np.linspace(0, T_total, N_points)
+extra_output = res['out']['extra']
 
+print("Extra output (phi_dot):", extra_output)
+exit()
 # Reshape the results if necessary (usually solution_x will be an array of all states over time)
 solution_x = np.array(solution_x.full()).reshape((14, N_points))  # Reshape to get [states x time points]
 
@@ -421,6 +439,10 @@ time_grid = np.linspace(0, T_total, len(solution_x[0]))
 # print("Final state:", final_state)
 # print("Final algebraic constraint values:", final_alg)
 
+np.save("solution_x.npy", solution_x)
+np.save("time_grid.npy", time_grid)
+np.save("control_input.npy", u0)
+exit()
 ### Plotting the Results ###
 
 # Plot semi-major axis of the chief
@@ -526,31 +548,34 @@ def update_dynamic_frame(event):
 # Connect the update function to the interactive plot (ax1)
 ax1.figure.canvas.mpl_connect('motion_notify_event', update_dynamic_frame)
 
+plt.show()
 # Show the zoomed plot
-plt.show() 
-# Plot the constraints angle over time
+############# Relative orbital Dynamics ####################
 fig, axs = plt.subplots(3, 1)
-axs[0].plot(time_grid, solution_x[0, :])
+
+# Plot data on the first subplot
+axs[0].plot(teval, rr_s[0])
 axs[0].set_title('x')
 
-axs[1].plot(time_grid, solution_x[1, :])
+# Plot data on the second subplot
+axs[1].plot(teval, rr_s[1])
 axs[1].set_title('y')
 
-axs[2].plot(time_grid, solution_x[2, :])
+axs[2].plot(teval, rr_s[2])
 axs[2].set_title('z')
+
 
 # Plot semi-major axis, mean true latitude, inclination
 fig, axs = plt.subplots(3, 1)
 axs[0].plot(time_grid, solution_x[0, :], label='semi-major axis')
 axs[1].plot(time_grid, solution_x[1, :], label='mean true latitude')
 axs[2].plot(time_grid, solution_x[2, :], label='inclination')
-
 axs[0].set_title('Semi-major axis')
 axs[1].set_title('Mean true latitude')
 axs[2].set_title('Inclination')
 
 plt.tight_layout()
-plt.show()
+
 
 # Plot q1, q2, right ascension of ascending node over time
 fig, axs = plt.subplots(3, 1)
@@ -563,7 +588,35 @@ axs[1].set_title('q2')
 axs[2].set_title('Right Ascension of Ascending Node')
 
 plt.tight_layout()
-plt.show()
+
+x = rr_s[0]
+y = rr_s[1]
+z = rr_s[2]
+# Plot x and y
+plt.figure(5)
+plt.plot(x, y, label='x vs y')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.legend()
+plt.title('Plot of x vs y')
+
+
+# Plot z and y
+plt.figure()
+plt.plot(z, y, label='z vs y', color='g')
+plt.xlabel('z')
+plt.ylabel('y')
+plt.legend()
+plt.title('Plot of z vs y')
+
+
+# Plot x and z
+plt.figure()
+plt.plot(x, z, label='x vs z', color='r')
+plt.xlabel('x')
+plt.ylabel('z')
+plt.legend()
+plt.title('Plot of x vs z')
 
 # Plot yaw angles and constraints angle over time
 fig, axs = plt.subplots(3, 1)
@@ -575,8 +628,6 @@ axs[1].set_title('Deputy 1 yaw angle')
 
 axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
 axs[2].set_title('Constraints angle')
-
-plt.tight_layout()
 plt.show()
 
 print("Plots generated.")
