@@ -4,6 +4,7 @@ import numpy
 import matplotlib.pyplot as plt
 import os
 import sys
+import time
 
 # Add the folder containing your modules to the Python path
 path_core = "..\\core"
@@ -21,9 +22,10 @@ if module_path_casadi_converter not in sys.path:
     sys.path.append(module_path_casadi_converter)
 
 # Load the CasADi versions of the functions you've converted
-from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
 
-from TwoBP import Param2NROE, M2theta
+from TwoBP import Param2NROE, M2theta, NSROE2LVLH
+from constrains import con_chief_deputy_angle
 
 print("Modules loaded successfully.")
 
@@ -46,11 +48,9 @@ param = {
     },
     "N_deputies": 2,
     "sat": [1.2, 1.2, 1.2],  # Moments of inertia
-
-    # New fields
-    "T_MAX": 23e-6,  # Nm
-    "PHI_DOT": 0.1* (np.pi / 180),  # rad/s
-    "PHI": 90 * (np.pi / 180)  # Convert 90 degrees to radians
+    "T_MAX": [0, 23e-6],  # Maximum torque (Nm)
+    "PHI_DOT": [0.0, 0.1],  # Limits for yaw rate (rad/s)
+    "PHI": [-np.pi / 2, np.pi / 2]  # Limits for yaw angle (rad)
 }
 
 print("Parameters initialized.")
@@ -58,7 +58,7 @@ print("Parameters initialized.")
 deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad])
+NOE_chief = numpy.array([6500,0.5,40*deg2rad,0.5,0.2,45*deg2rad])
 print("Chief initial orbital elements set.")
 
 # Assigning the state variables
@@ -104,6 +104,12 @@ print("RHO_2", rho_2)
 print(d/1+e, d/1-e, d*(1/(2*(eta**2)) /(3-eta**2)))
 parameters = numpy.array([rho_1, rho_2, rho_3, alpha, beta, vd])
 
+print("Load numpy array for initial guass")
+yy_ref = np.load("solution_x_200_100.npy")
+print("yy_ref>size",yy_ref.shape, yy_ref[:,-1].shape)
+l_colm = yy_ref[:,-1].reshape(-1,1)
+a= np.concatenate((yy_ref,l_colm),axis =1)
+print("a>size",a.shape)
 print("Formation parameters set:", parameters)
 
 # Initial relative orbital elements
@@ -112,7 +118,9 @@ print("Initial relative orbital elements calculated.")
 
 # Angle of attack for the deputy spacecraft
 yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2 = 0.08  # [rad] - angle of attack = 0
+yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
+yaw_2 = yaw_2_val
+print("Yaw angles calculated, yaw_2:", yaw_2)
 yaw_c_d = numpy.array([yaw_1, yaw_2])
 
 print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
@@ -123,13 +131,14 @@ yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
 # Test for Gauss equation
 mu = param["Primary"][0]
+N_points = 200
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
-n_revol_T = 0.0005 * 365 * 24 * 60 * 60 / Torb
-n_revolution = 0.005  # n_revol_T
+n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
+n_revolution =100  # n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
-teval = numpy.linspace(0, T_total, 1000)
+teval = numpy.linspace(0, T_total, N_points)
 
 # Simulate
 uu_o = np.zeros((2, 1))  # Control inputs
@@ -143,112 +152,112 @@ tol1 = 0.2  # Define appropriate values
 tol2 = 0.2
 d_koz = 0.3  # Define collision avoidance distance
 
-# Define your Opti problem
-opti = ca.Opti()
 
 # Problem parameters
-N = 100  # Number of control intervals
+N = N_points  # Number of control intervals
 T_total = 2 * np.pi * np.sqrt(6500**3 / 3.98600433e5)  # Orbital period
 T = T_total
 dt = T / N
-
-# Define state variables (14 state variables: 6 for NSROE deputy, 6 for NSROE chief, 2 for yaw angles)
-X = opti.variable(14, N + 1)
-
-# Define control variables (2 control variables for yaw dynamics)
-U = opti.variable(2, N)
-
-# Time variable (not needed explicitly in Opti formulation, but present for dynamics)
-t = ca.MX.sym('t')
-
-# Objective: Minimize the semi-major axis of the chief (X[6] is the semi-major axis of the chief)
-opti.minimize(-X[6, -1])
 
 # Define tolerance values
 tol1 = 0.2
 tol2 = 0.2
 d_koz = 0.3  # Collision avoidance distance
+start_time = time.time()
+# Define your Opti problem
+opti = ca.Opti()
 
-# Define the RK5 integration method
+# Define state variables (14 states: 6 NSROE deputy, 6 NSROE chief, 2 yaw angles)
+X = opti.variable(14, N + 1)
+
+# Define control variables (2 control variables for yaw dynamics)
+U = opti.variable(2, N)
+
+# Define the dynamics function
+t = ca.MX.sym('t')
+dynamics_casadi_sym = Dynamics_casadi(t, X[:, 0], param, U[:, 0])
+
+# Objective: Minimize the semi-major axis of the chief
+opti.minimize(-X[6, -1])
+
+# Define RK5 integration method
 def rk5_step(f, t, x, u, dt, param):
     k1 = f(t, x, param, u)
     k2 = f(t + 0.25 * dt, x + 0.25 * dt * k1, param, u)
     k3 = f(t + 0.375 * dt, x + 0.375 * dt * k2, param, u)
     k4 = f(t + 0.923076923 * dt, x + 0.923076923 * dt * k3, param, u)
     k5 = f(t + dt, x + dt * k4, param, u)
-    
-    # Compute the weighted average of the slopes
     x_next = x + dt * (0.1185185185 * k1 + 0.5189863548 * k2 + 0.50613149 * k3 + 0.018963184 * k4 + 0.2374078411 * k5)
-    
     return x_next
 
+
 # Collocation constraints using RK5 for the state and dynamics
+dt = T_total / N
 for k in range(N):
     xk = X[:, k]       # State at step k
     uk = U[:, k]       # Control at step k
     x_next = X[:, k+1]  # State at step k+1
-    
+
     # Compute next state using RK5
     x_next_pred = rk5_step(Dynamics_casadi, t, xk, uk, dt, param)
     
     # Add the collocation constraint (RK5-based prediction should match the next state)
     opti.subject_to(x_next == x_next_pred)
 
-    # Calculate the relative position `r` between chief and deputy in the LVLH frame
+    # Calculate the relative position `r` between chief and deputy in LVLH frame
     r = ca.norm_2(NSROE2LVLH_casadi(xk[0:6], xk[6:12], param))
 
-    # # Constraint 1: Lower and upper bounds on `r`
-    # opti.subject_to(tol2 - r <= 0)
-    # opti.subject_to(r - tol1 <= 0)
+    # Inequality Constraints: Position and Collision Avoidance
 
-    # # Constraint 2: d_koz < r (collision avoidance)
-    # opti.subject_to(d_koz - r <= 0)
+    # opti.subject_to(r >= 0.2)  # Lower bound constraint
+    # opti.subject_to(r <= 0.3)  # Upper bound
+    # opti.subject_to(d_koz < r)   # Collision avoidance
 
-    # Constraint 3 & 4: phi_dot range constraints for chief and deputy
-    opti.subject_to(param["PHI_DOT"] - X[12, k] <= 0)  # Chief phi_dot
-    opti.subject_to(X[12, k] - param["PHI_DOT"] <= 0)
-    
-    opti.subject_to(param["PHI_DOT"] - X[13, k] <= 0)  # Deputy phi_dot
-    opti.subject_to(X[13, k] - param["PHI_DOT"] <= 0)
+    # Dynamics derivative (dx/dt)
+    dx_dt = Dynamics_casadi(t, xk, param, uk)
 
-    # Constraint 5 & 6: Yaw angle range constraints for chief and deputy
-    opti.subject_to(param["PHI"] - X[12, k] <= 0)  # Chief yaw angle
-    opti.subject_to(X[12, k] - param["PHI"] <= 0)
+    # # Constraint: Yaw rate limits for chief and deputy (dx/dt[12] and dx/dt[13])
+    # opti.subject_to(dx_dt[12] >= param["PHI_DOT"][0])
+    # opti.subject_to(dx_dt[12] <= param["PHI_DOT"][1])
+    # opti.subject_to(dx_dt[13] >= param["PHI_DOT"][0])
+    # opti.subject_to(dx_dt[13] <= param["PHI_DOT"][1])
 
-    opti.subject_to(param["PHI"] - X[13, k] <= 0)  # Deputy yaw angle
-    opti.subject_to(X[13, k] - param["PHI"] <= 0)
+    # # Constraint: Yaw angle limits for chief and deputy (x[12] and x[13])
+    # opti.subject_to(xk[12] >= param["PHI"][0])
+    # opti.subject_to(xk[12] <= param["PHI"][1])
+    # opti.subject_to(xk[13] >= param["PHI"][0])
+    # opti.subject_to(xk[13] <= param["PHI"][1])
 
-    # Constraint 7 & 8: Control input torque constraints
-    opti.subject_to(param["T_MAX"] - U[0, k] <= 0)  # Chief torque
-    opti.subject_to(U[0, k] - param["T_MAX"] <= 0)
+    # # Control input constraints (torque limits)
+    # opti.subject_to(uk[0] >= param["T_MAX"][0])  # Chief torque lower bound
+    # opti.subject_to(uk[0] <= param["T_MAX"][1])  # Chief torque upper bound
+    # opti.subject_to(uk[1] >= param["T_MAX"][0])  # Deputy torque lower bound
+    # opti.subject_to(uk[1] <= param["T_MAX"][1])  # Deputy torque upper bound
 
-    opti.subject_to(param["T_MAX"] - U[1, k] <= 0)  # Deputy torque
-    opti.subject_to(U[1, k] - param["T_MAX"] <= 0)
-
-    # Constraint 9: Dynamics constraint
-    x_dot = Dynamics_casadi(t, xk, param, uk)
-    opti.subject_to(ca.vertcat(x_dot - x_next_pred) == 0)
-
-    # # Constraint 10: Relative angle constraint between chief and deputy
-    # phi_deputy = con_chief_deputy_angle_casadi(xk, param)
-    # opti.subject_to(phi_deputy <= 0)
+    phi_deputy = con_chief_deputy_angle_casadi(xk, param)
+    opti.subject_to(phi_deputy == xk[13]+xk[13]*0.5)
 
 # Initial condition constraints
-opti.subject_to(X[:, 0] == yy_o)  # Initial state should match the given initial condition
+opti.subject_to(X[:, 0] == yy_o)
+
 
 # Set initial guesses for the optimization problem
-opti.set_initial(X, np.tile(yy_o, (N + 1, 1)).T)
-opti.set_initial(U, np.zeros((2, N))) 
+opti.set_initial(X, np.concatenate((yy_ref,l_colm),axis =1))
+opti.set_initial(U, np.zeros((2, N)))
 
 # Solver options
+
+print("Optimization problem set up...")
 opti.solver('ipopt', {
     'expand': True,
-    'ipopt.print_level': 4,  # Detailed print level (higher values show more information)
-    'ipopt.max_iter': 1000,  # Max iterations
+    'ipopt.print_level': 4,  # Detailed print level
+    'ipopt.max_iter': N_points,  # Max iterations
     'ipopt.tol': 1e-6,  # Convergence tolerance
     'print_time': True,  # Print computation time
     'ipopt.sb': 'yes',  # Show solver's internal message
 })
+print("Solver options set.")
+print("Solving the problem...")
 
 # Solve the problem
 try:
@@ -256,13 +265,24 @@ try:
 
     # Check solver status
     if opti.stats()['success']:
+
+        # Record the end time
+        end_time = time.time()
+
+        # Calculate the duration
+        duration = end_time - start_time
+        print(f"Time taken to solve the problem: {duration:.2f} seconds")
+
         print("Solver was successful.")
+        # # Extract solution
+        solution_x = sol.value(X)
+        solution_u = sol.value(U)
+        np.save("solution_x_casadi_opt_1000_phi_contrain.npy",solution_x)
+        np.save("solution_u_casadi_opt_1000_phi_constrain.npy",solution_u )
     else:
         print("Solver failed to find a solution.")
+        exit()
 
-    # # Extract solution
-    # solution_x = sol.value(X)
-    # solution_u = sol.value(U)
 
     # print("Solution extracted.")
 
@@ -275,10 +295,18 @@ except RuntimeError as e:
     print("State variables at failure:", X_value)
     print("Control variables at failure:", U_value)
 
+
+##################################
+
+solution_x = np.load("solution_x_casadi_opt_1000.npy")
+solution_u = np.load("solution_u_casadi_opt_1000.npy")
+
+
 # Ensure solution_x and solution_u are defined
 if solution_x is not None and solution_u is not None:
     # Plotting the results
     time_grid = np.linspace(0, T, N + 1)
+
 
     # Plot semi-major axis of the chief
     plt.figure()
@@ -297,13 +325,15 @@ if solution_x is not None and solution_u is not None:
     plt.title('Yaw angles over time')
     plt.legend()
 
-    rr_s = np.zeros((3, len(teval)))
-    angle_con_array = numpy.zeros((len(teval)))
+    rr_s = np.zeros((3, len(solution_x[12, :])))
+    angle_con_array = numpy.zeros(len(solution_x[12,:]))
     # For each time step, compute the position
     for i in range(len(solution_x[12, :])):
         yy1 = solution_x[0:6, i]  # Deputy NSROE
         yy2 = solution_x[6:12, i]  # Chief NSROE
-        rr_s[:, i] = NSROE2LVLH_casadi(yy1, yy2, param).full().flatten()
+        rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
+        print(solution_x[:,i].shape)
+        angle_con_array[i] = con_chief_deputy_angle(solution_x[:,i], param)
 
     # Plot the LVLH frame trajectory in 3D
     fig = plt.figure(figsize=(12, 6))
