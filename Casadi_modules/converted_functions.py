@@ -5,6 +5,52 @@ import pickle
 
 from density_model_ca import density_get_casadi
 
+# Define a small tolerance value for handling small numbers
+TOL_val = 1e-12
+
+TOL = ca.MX(TOL_val)
+
+def log_adjustment(value, context=""):
+    """Utility to log changes for very small values."""
+    print(f"Adjusted small value in {context}: {value}")
+    return value
+
+# Ensuring safe operations for small values in trigonometric and other critical functions
+def safe_sqrt(x, context=""):
+    """Safely compute square root, adjusting if input is too small."""
+    print(type(x),type(TOL))
+    if ca.fabs(x) < TOL:
+        log_adjustment(x, context)
+        return ca.sqrt(ca.fabs(x))  # Ensure we don't take sqrt of negative number
+    return ca.sqrt(x)
+
+def safe_acos(x, context=""):
+    """Safely compute arccos, adjusting if input is outside valid range."""
+    x = ca.fmax(ca.fmin(x, 1.0), -1.0)  # Clamp values between -1 and 1
+    if x < -1 + TOL or x > 1 - TOL:
+        log_adjustment(x, context)
+    return ca.acos(x)
+
+def safe_atan2(y, x, context=""):
+    """Safely compute atan2, adjusting if both inputs are too small."""
+    if ca.fabs(x) < TOL and ca.fabs(y) < TOL:
+        log_adjustment((x, y), context)
+    return ca.atan2(y, x)
+
+def safe_divide(numerator, denominator, context=""):
+    """Safely divide, avoiding division by zero."""
+    if ca.fabs(denominator) < TOL:
+        log_adjustment(denominator, context)
+        return numerator / (denominator + TOL)  # Add small tolerance to avoid division by zero
+    return numerator / denominator
+
+import casadi as ca
+import numpy as np
+import pickle
+
+
+from density_model_ca import density_get_casadi
+
 
 
 def M2theta_casadi(M, e, tol=1e-10, max_iter=20):
@@ -23,7 +69,7 @@ def M2theta_casadi(M, e, tol=1e-10, max_iter=20):
         # Note: In CasADi, loops are unrolled, so max_iter should be kept small
 
     # Calculate theta (True Anomaly)
-    sqrt_expr = ca.sqrt((1 + e) / (1 - e))
+    sqrt_expr = safe_sqrt((1 + e) / (1 - e))
     theta = 2 * ca.atan(sqrt_expr * ca.tan(E / 2))
 
     return theta  # Return in radians
@@ -43,19 +89,19 @@ def NSROE2car_casadi(ROE, param):
     OM = ROE[5]
 
     # Calculations
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
     eta = 1 - q1**2 - q2**2
-    n = ca.sqrt(mu / (a**3))
+    n = safe_sqrt(mu / (a**3))
 
     # # Handle the condition e == 0 using CasADi's conditional functions
     # e_zero = ca.fabs(e) < 1e-8  # Define a small threshold
 
     # Check if e is approximately zero
-    e_zero = ca.fabs(ca.sqrt(q1**2 + q2**2)) < 1e-8
+    e_zero = ca.fabs(safe_sqrt(q1**2 + q2**2)) < 1e-8
 
     # Precompute the expressions for both branches
-    omega_peri = ca.if_else(e_zero, 0, ca.acos(q1 / e))
+    omega_peri = ca.if_else(e_zero, 0, safe_acos(q1 / e))
     mean_anomaly = l - omega_peri
     theta = M2theta_casadi(mean_anomaly, e)
     u_false = theta + omega_peri  # What to do if e != 0
@@ -91,7 +137,7 @@ def calculate_rms_speed_casadi(T, M_mean):
     m_mean = M_mean_kg_per_mol / N_A   # Calculate mass per molecule (kg)
 
     # RMS speed (m/s)
-    v_rms = ca.sqrt(3 * k_B * T / m_mean)
+    v_rms = safe_sqrt(3 * k_B * T / m_mean)
     return v_rms
 
 # Conversion of compute_coefficients() to CasADi
@@ -100,7 +146,7 @@ def compute_coefficients_casadi(v_inc, Ma, Ta, gamma_i, l_i, alpha_acc):
     T_w = 300  # Wall temperature in Kelvin
 
     # Molecular speed ratio s
-    s = calculate_rms_speed_casadi(Ta, Ma) * ca.sqrt(Ma) / ca.sqrt(2 * R * Ta)
+    s = calculate_rms_speed_casadi(Ta, Ma) * safe_sqrt(Ma) / safe_sqrt(2 * R * Ta)
 
     # Pi
     P_i = ca.exp(-gamma_i**2 / s**2) * s**2
@@ -116,7 +162,7 @@ def compute_coefficients_casadi(v_inc, Ma, Ta, gamma_i, l_i, alpha_acc):
     T_inc = 300  # Assuming a constant value
 
     # v_rem
-    v_rem = v_inc * ca.sqrt(2/3 * (1 + alpha_acc * (T_w / T_inc - 1)))
+    v_rem = v_inc * safe_sqrt(2/3 * (1 + alpha_acc * (T_w / T_inc - 1)))
 
     return P_i, Q, G, Z_i, v_rem
 
@@ -125,7 +171,7 @@ def calculate_cd_cl_casadi(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc)
     # Get the coefficients Pi, Q, G, Zi, and v_rem
     P_i, Q, G, Z_i, v_rem = compute_coefficients_casadi(v_inc, Ma, Ta, gamma_i, l_i, alpha_acc)
 
-    sqrt_pi = ca.sqrt(ca.pi)
+    sqrt_pi = safe_sqrt(ca.pi)
 
     # Calculate Cd
     Cd = (S_i / S_ref_i) * (P_i / sqrt_pi + gamma_i * Q * Z_i + 
@@ -161,7 +207,7 @@ def car2kep_casadi(r, v, mu):
     h_mag = ca.norm_2(h)
     
     # Inclination
-    i = ca.acos(h[2] / h_mag)
+    i = safe_acos(h[2] / h_mag)
     
     # Node vector (used for RAAN)
     K = ca.vertcat(0, 0, 1)
@@ -169,7 +215,7 @@ def car2kep_casadi(r, v, mu):
     N_mag = ca.norm_2(N)
     
     # Right Ascension of Ascending Node (RAAN)
-    Omega = ca.if_else(N_mag != 0, ca.acos(N[0] / N_mag), 0)
+    Omega = ca.if_else(N_mag != 0, safe_acos(N[0] / N_mag), 0)
     Omega = ca.if_else(N[1] < 0, 2 * ca.pi - Omega, Omega)
     
     # Eccentricity vector
@@ -178,12 +224,12 @@ def car2kep_casadi(r, v, mu):
 
     # Argument of periapsis (omega)
     omega = ca.if_else(ca.logic_and(N_mag != 0, e_mag != 0),
-                       ca.acos(ca.fmax(ca.fmin(ca.dot(N / N_mag, e_vec / e_mag), 1), -1)), 0)
+                       safe_acos(ca.fmax(ca.fmin(ca.dot(N / N_mag, e_vec / e_mag), 1), -1)), 0)
     omega = ca.if_else(e_vec[2] < 0, 2 * ca.pi - omega, omega)
 
     # True anomaly (theta)
     theta = ca.if_else(e_mag != 0,
-                       ca.acos(ca.dot(e_vec / e_mag, r / r_mag)), 0)
+                       safe_acos(ca.dot(e_vec / e_mag, r / r_mag)), 0)
     theta = ca.if_else(ca.dot(r, v) < 0, 2 * ca.pi - theta, theta)
     
     # Semi-major axis (a)
@@ -232,7 +278,7 @@ def kep2car_casadi(COE, mu):
 
 def theta2M_casadi(theta, e, tol=1e-8):
     # Eccentric anomaly
-    E = 2 * ca.atan(ca.sqrt((1 - e) / (1 + e)) * ca.tan(theta / 2))
+    E = 2 * ca.atan(safe_sqrt((1 - e) / (1 + e)) * ca.tan(theta / 2))
     
     # Mean anomaly
     M = E - e * ca.sin(E)
@@ -265,10 +311,10 @@ def Param2NROE_casadi(NOE, parameters, data):
     mu = data[0]  # Access the first element of data["Primary"]
 
     # CasADi symbolic operations
-    eta = ca.sqrt(1 - q1**2 - q2**2)
-    n = ca.sqrt(mu / a**3)
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
+    eta = safe_sqrt(1 - q1**2 - q2**2)
+    n = safe_sqrt(mu / a**3)
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
     p = (h**2) / mu
 
     # Delta values (equations from the paper)
@@ -313,21 +359,21 @@ def lagrange_J2_diff_casadi(t, yy, data):
     OM = yy[5]
 
     # Calculations
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
     eta = 1 - q1**2 - q2**2
-    n = ca.sqrt(mu / (a**3))
+    n = safe_sqrt(mu / (a**3))
     term1 = (h**2) / mu
-    eta = ca.sqrt(1 - q1**2 - q2**2)
+    eta = safe_sqrt(1 - q1**2 - q2**2)
     p = term1
     # # Handle the condition e == 0 using CasADi's conditional functions
     # e_zero = ca.fabs(e) < 1e-8  # Define a small threshold
 
     # Check if e is approximately zero
-    e_zero = ca.fabs(ca.sqrt(q1**2 + q2**2)) < 1e-8
+    e_zero = ca.fabs(safe_sqrt(q1**2 + q2**2)) < 1e-8
 
     # Precompute the expressions for both branches
-    omega_peri = ca.if_else(e_zero, 0, ca.acos(q1 / e))
+    omega_peri = ca.if_else(e_zero, 0, safe_acos(q1 / e))
     mean_anomaly = l - omega_peri
     theta = M2theta_casadi(mean_anomaly, e)
     u_false = theta + omega_peri  # What to do if e != 0
@@ -393,7 +439,7 @@ def RSW2ECI_casadi(OM, om, i, theta):
 # LVLH Frame
 def LVLHframe_casadi(rr, vv):
     # rr and vv are in ECI frame
-    r_norm = ca.sqrt(rr[0]**2 + rr[1]**2 + rr[2]**2)
+    r_norm = safe_sqrt(rr[0]**2 + rr[1]**2 + rr[2]**2)
     x_unit = rr / r_norm
 
     z_unit = ca.cross(rr, vv) / ca.norm_2(ca.cross(rr, vv))
@@ -406,7 +452,7 @@ def LVLHframe_casadi(rr, vv):
 # Frenet Frame
 def Frenetframe_casadi(rr, vv):
     # rr and vv are in ECI frame
-    v_norm = ca.sqrt(vv[0]**2 + vv[1]**2 + vv[2]**2)
+    v_norm = safe_sqrt(vv[0]**2 + vv[1]**2 + vv[2]**2)
     T_unit = vv / v_norm
 
     W_unit = ca.cross(rr, vv) / ca.norm_2(ca.cross(rr, vv))
@@ -528,7 +574,7 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
 
         v_inc_normalized = normalize_casadi(v_rel)
         n_i_normalized = normalize_casadi(normal_vector)
-        theta = ca.acos(ca.dot(v_inc_normalized, n_i_normalized))
+        theta = safe_acos(ca.dot(v_inc_normalized, n_i_normalized))
         gamma_i = ca.cos(theta)
 
         lift_direction = ca.cross(normal_vector, v_rel)
@@ -585,111 +631,8 @@ def casadi_polyval(coeffs, x):
     return p
 
 
-# def lookup_surface_properties_casadi(angle, poly_coeffs):
-#     surfaces_data = []
-
-#     for surface, coeffs in poly_coeffs.items():
-#         # Symbolic polynomial evaluation using custom Horner's method
-#         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
-#         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
-#         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
-#         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
-
-#         # Use CasADi if_else instead of a Python if statement for symbolic comparison
-#         condition = projected_area > 0
-
-#         # Create a zero vector with the same shape as the output
-#         zero_vector = ca.DM.zeros(4)
-
-#         # Append the result, ensuring both true and false branches have the same dimensions
-#         surfaces_data.append(ca.if_else(condition, ca.vertcat(normal_x, normal_y, normal_z, projected_area), zero_vector))
-
-#     # Concatenate all surfaces symbolically
-#     surfaces_concat = ca.horzcat(*surfaces_data) if surfaces_data else ca.DM([])
-
-#     # Now evaluate the result numerically using CasADi's function evaluation
-#     eval_function = ca.Function('eval_surfaces', [angle], [surfaces_concat])
-
-#     return eval_function  # Return the CasADi function
-
-# def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
-#     surfaces_data = []
-
-#     for surface, coeffs in poly_coeffs.items():
-#         # Symbolic polynomial evaluation using custom Horner's method
-#         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
-#         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
-#         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
-#         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
-
-#         # Use CasADi if_else instead of a Python if statement for symbolic comparison
-#         condition = projected_area > 0
-
-#         # Create a zero vector with the same shape as the output (4x1)
-#         zero_vector = ca.DM.zeros(4)
-
-#         # Append the result, ensuring both true and false branches have the same dimensions (4x1)
-#         surfaces_data.append(ca.if_else(condition, ca.vertcat(normal_x, normal_y, normal_z, projected_area), zero_vector))
-
-#     # Concatenate all surfaces symbolically (4xN)
-#     surfaces_concat = ca.horzcat(*surfaces_data) if surfaces_data else ca.DM([])
-
-#     # Now evaluate the result numerically using CasADi's function evaluation
-#     eval_function = ca.Function('eval_surfaces', [angle], [surfaces_concat])
-
-#     # Evaluate the result for a specific numeric angle
-#     surfaces_concat_evaluated = eval_function(ca.DM(angle_numeric))
-
-#     # Convert to full matrix for comparison
-#     surfaces_concat_evaluated = surfaces_concat_evaluated.full()
-
-#     # Remove any zero rows (all-zero vectors) after evaluation (Ensure at least 4xN output)
-#     non_zero_surfaces = surfaces_concat_evaluated[~np.all(surfaces_concat_evaluated == 0, axis=1)]
-    
-#     #print(non_zero_surfaces)
-
-#     return non_zero_surfaces
 
 
-
-# # # # # # def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
-# # # # # #     surfaces_data = []
-
-# # # # # #     for surface, coeffs in poly_coeffs.items():
-# # # # # #         # Symbolic polynomial evaluation using custom Horner's method
-# # # # # #         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
-# # # # # #         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
-# # # # # #         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
-# # # # # #         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
-
-# # # # # #         # Use CasADi if_else instead of a Python if statement for symbolic comparison
-# # # # # #         condition = projected_area > 0
-
-# # # # # #         # Create a zero vector for the case when the projected area is zero or negative
-# # # # # #         zero_vector = ca.DM.zeros(4)
-
-# # # # # #         # Use `ca.if_else` to either use the valid surface or a zero vector
-# # # # # #         valid_surface = ca.if_else(condition, ca.vertcat(normal_x, normal_y, normal_z, projected_area), zero_vector)
-        
-# # # # # #         surfaces_data.append(valid_surface)
-
-
-# # # # # #     # Concatenate all surfaces symbolically (should be 4xN)
-# # # # # #     surfaces_concat = ca.horzcat(*surfaces_data) if surfaces_data else ca.DM([])
-
-# # # # # #     # Now evaluate the result numerically using CasADi's function evaluation
-# # # # # #     eval_function = ca.Function('eval_surfaces', [angle], [surfaces_concat])
-
-# # # # # #     # Evaluate the result for a specific numeric angle
-# # # # # #     surfaces_concat_evaluated = eval_function(ca.DM(angle_numeric)).full()
-# # # # # #     #print(surfaces_concat_evaluated)
-# # # # # #     # Remove columns with all zero values
-# # # # # #     non_zero_columns = surfaces_concat_evaluated[:, ~np.all(surfaces_concat_evaluated == 0, axis=0)]
-# # # # # #     #print(non_zero_columns)
-# # # # # #     # Convert back to CasADi DM format
-# # # # # #     non_zero_surfaces_dm = ca.DM(non_zero_columns.transpose())
-# # # # # #     #print(non_zero_surfaces_dm)
-# # # # # #     return non_zero_surfaces_dm.T
 
 # Function that takes symbolic inputs and returns constant values
 def constant_value_casadi(value):
@@ -770,134 +713,7 @@ def lookup_surface_properties_casadi(angle, poly_coeffs):
     #print("Filtered non-zero surfaces size:", filtered_matrix.shape)
     return ca.transpose(filtered_matrix)
 
-# # # # Main function for looking up surface properties
-# # # def lookup_surface_properties_casadi(angle, poly_coeffs, angle_numeric):
-# # #     surfaces_data = []
 
-
-
-# # #     # Loop over surfaces and perform symbolic polynomial evaluation
-# # #     for surface, coeffs in poly_coeffs.items():
-# # #         # Perform the symbolic polynomial evaluation
-# # #         normal_x = casadi_polyval(ca.MX(coeffs['normal_x']), angle)
-# # #         normal_y = casadi_polyval(ca.MX(coeffs['normal_y']), angle)
-# # #         normal_z = casadi_polyval(ca.MX(coeffs['normal_z']), angle)
-# # #         projected_area = casadi_polyval(ca.MX(coeffs['area']), angle)
-
-# # #         # Create a CasADi function to evaluate these polynomials at a numeric angle
-# # #         poly_eval_func = ca.Function('poly_eval', [angle], [normal_x, normal_y, normal_z, projected_area])
-
-# # #         # Evaluate the CasADi function at the provided numeric angle (angle_numeric)
-# # #         evaluated_normals = poly_eval_func(angle_numeric)
-
-# # #         # Extract evaluated values into NumPy format
-# # #         normal_x_val = evaluated_normals[0].full().item()
-# # #         normal_y_val = evaluated_normals[1].full().item()
-# # #         normal_z_val = evaluated_normals[2].full().item()
-# # #         projected_area_val = evaluated_normals[3].full().item()
-
-# # #         # Check the projected area and filter valid surfaces
-# # #         if projected_area_val > 0:
-# # #             surfaces_data.append([normal_x_val, normal_y_val, normal_z_val, projected_area_val])
-
-# # #     # Convert the surfaces data to a NumPy array
-# # #     surfaces_np = np.array(surfaces_data)
-
-# # #     non_zero_surfaces_dm = ca.DM(surfaces_data)  # No need to transpose back
-# # #     non_zero_surfaces_dm = ca.transpose(non_zero_surfaces_dm)  # Correct CasADi transpose
-
-    
-# # #     return non_zero_surfaces_dm
-
-
-
-# # # # # # def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, data, AOA):
-# # # # # #     a_drag_total = ca.DM.zeros(3)  # Initialize drag acceleration vector
-# # # # # #     a_lift_total = ca.DM.zeros(3)  # Initialize lift acceleration vector
-    
-# # # # # #     spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
-# # # # # #     Area = data["S/C"][1]  # Cross-sectional area (m^2)  
-# # # # # #     #print("surface_properties:", surface_properties)
-# # # # # #     # Ensure that surface_properties is in the correct shape (4xN)
-# # # # # #     #print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", surface_properties.shape, surface_properties.shape[1] == 4)
-# # # # # #     assert surface_properties.shape[1] == 4, "Each surface should have 4 components (normal_x, normal_y, normal_z, projected_area)"
-    
-# # # # # #     # Iterate through surface properties using horzsplit to split into individual surfaces
-# # # # # #     surfaces_split =  ca.vertsplit(surface_properties, 1)  # Split into individual surfaces
-
-# # # # # #     for surface in surfaces_split:
-# # # # # #         normal_vector = surface[:3]  # Extract normal vector
-# # # # # #         projected_area = surface[3]  # Extract projected area
-
-# # # # # #         # CL and CD calculation
-# # # # # #         S_i = projected_area  # Area of the plate (m^2)
-# # # # # #         S_ref_i = 1000  # large common denominator for CL and CD
-
-# # # # # #         # gamma for this surface
-# # # # # #         v_inc_normalized = v_rel / ca.norm_2(v_rel)
-# # # # # #         n_i_normalized = normal_vector / ca.norm_2(normal_vector)
-# # # # # #         theta = ca.acos(ca.dot(v_inc_normalized, n_i_normalized))
-# # # # # #         gamma_i = ca.cos(theta)
-
-# # # # # #         # direction cosine for lift direction for this surface
-# # # # # #         lift_direction = ca.cross(normal_vector, v_rel)
-# # # # # #         lift_direction_normalized = lift_direction / ca.norm_2(lift_direction)
-        
-# # # # # #         l_i = ca.sin(theta)
-# # # # # #         v_inc = ca.norm_2(v_rel)  # Incoming velocity (m/s)
-
-# # # # # #         Ma = M  # Mean molar mass of air (g/mol)
-# # # # # #         Ta = T  # Ambient temperature (K)
-# # # # # #         alpha_acc = 1.0  # Accommodation coefficient
-
-# # # # # #         # Dummy Cd and Cl calculation functions (replace with actual implementation)
-# # # # # #         C_D, C_L = calculate_cd_cl_casadi(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc)
-
-# # # # # #         # Calculate drag coefficient for this surface
-# # # # # #         B_D = spacecraft_mass / (Area * projected_area * C_D)
-        
-# # # # # #         # Calculate lift coefficient for this surface
-# # # # # #         B_L = spacecraft_mass / (Area * projected_area * C_L)
-        
-# # # # # #         # Drag acts opposite to velocity
-# # # # # #         drag_direction = v_rel / ca.norm_2(v_rel)
-        
-# # # # # #         lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
-        
-# # # # # #         # Calculate the contribution to drag acceleration from this surface
-# # # # # #         a_drag = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_D) * drag_direction
-# # # # # #         a_drag_total += a_drag / spacecraft_mass
-        
-# # # # # #         # Calculate the contribution to lift acceleration from this surface
-# # # # # #         a_lift = 0.5 * rho * (v_inc * 1e3)**2 * (1 / B_L) * lift_direction
-# # # # # #         a_lift_total += a_lift / spacecraft_mass
-    
-# # # # # #     return a_drag_total, a_lift_total
-
-# # Generic CasADi-based function to compute aerodynamic forces for a spacecraft entity
-# def compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, vv, rr):
-#     # Relative velocity of the spacecraft
-#     v_rel = vv - ca.cross(ca.MX([0, 0, entity_data["Primary"][2]]), rr)
-
-#     # Magnitude of position vector
-#     rr_mag = ca.norm_2(rr)
-
-#     # Convert the position vector and velocity to NNSOE
-#     NNSOE_den = car2NNSOE_density_casadi(rr, vv, entity_data["Primary"][0])
-#     i = NNSOE_den[2]
-#     u = NNSOE_den[3]
-
-#     # Density model: use `density_get_casadi` function (CasADi-based)
-#     h = rr_mag - entity_data["Primary"][1]
-#     rho, M, T = density_get_casadi(h, u, i)
-
-#     # Lookup surface properties using the CasADi function
-#     surface_properties = lookup_surface_properties_casadi(AOA * 180 / np.pi, loaded_polynomials, AOA)
-
-#     # Calculate drag and lift for the spacecraft
-#     a_drag, a_lift = calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, entity_data, AOA)
-
-#     return a_drag, a_lift
 
 def compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, vv, rr):
     
@@ -1039,11 +855,11 @@ def Lagrange_deri_casadi(t, yy, param):
     q2 = yy[4]
     OM = yy[5]
 
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
     p = h**2 / mu
-    eta = ca.sqrt(1 - q1**2 - q2**2)
-    n = ca.sqrt(mu / (a**3))
+    eta = safe_sqrt(1 - q1**2 - q2**2)
+    n = safe_sqrt(mu / (a**3))
 
     # Using ca.if_else to handle conditional logic
     u = ca.if_else(e == 0, l, 0)  # If e == 0, use l, otherwise use a default value like 0
@@ -1123,19 +939,19 @@ def guess_nonsingular_Bmat_casadi(t, yy, param):
     q2 = yy[4]
     OM = yy[5]
 
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
     p = (h**2) / mu
-    eta = ca.sqrt(1 - q1**2 - q2**2)
+    eta = safe_sqrt(1 - q1**2 - q2**2)
     rp = a * (1 - e)
-    n = ca.sqrt(mu / (a**3))
+    n = safe_sqrt(mu / (a**3))
 
     # Compute u and r based on the eccentricity value
     u_circular = l  # Circular orbits: u = l
     r_circular = (a * eta**2) / (1 + q1 * ca.cos(u_circular) + q2 * ca.sin(u_circular))  # r for circular orbit
 
     # For elliptical orbits, compute u and r
-    omega_peri_elliptical = ca.acos(q1 / e)
+    omega_peri_elliptical = safe_acos(q1 / e)
     mean_anamoly_elliptical = l - omega_peri_elliptical
     theta_tuple = M2theta_casadi(mean_anamoly_elliptical, e, 1e-8)
     theta_elliptical = theta_tuple[0]
@@ -1275,15 +1091,15 @@ def NSROE2LVLH_casadi(NSROE, NSOE0, data):
     delta_q2 = NSROE[4]
     delta_Omega = NSROE[5]
 
-    e = ca.sqrt(q1**2 + q2**2)
-    h = ca.sqrt(mu * a * (1 - e**2))
-    eta = ca.sqrt(1 - q1**2 - q2**2)
+    e = safe_sqrt(q1**2 + q2**2)
+    h = safe_sqrt(mu * a * (1 - e**2))
+    eta = safe_sqrt(1 - q1**2 - q2**2)
     p = (h**2) / mu
     rp = a * (1 - e)
-    n = ca.sqrt(mu / (a**3))
+    n = safe_sqrt(mu / (a**3))
 
     # Calculate u and r based on whether e is zero or not
-    omega_peri = ca.if_else(e > 1e-6, ca.acos(q1 / e), 0)  # Handle near-zero eccentricity case
+    omega_peri = ca.if_else(e > 1e-6, safe_acos(q1 / e), 0)  # Handle near-zero eccentricity case
     mean_anomaly = l - omega_peri
     theta_tuple = M2theta_casadi(mean_anomaly, e, 1e-8)
     theta = theta_tuple[0]
@@ -1304,20 +1120,20 @@ def NSROE2LVLH_casadi(NSROE, NSOE0, data):
     
 
 
-    e1 =(a / eta) * ca.sqrt(test_6)
+    e1 =(a / eta) * safe_sqrt(test_6)
     
     e2 = p * (delta_Omega * ca.cos(i) + ((1 + eta + eta**2) / (eta**3 * (1 + eta))) * (q2 * delta_q1 - q1 * delta_q2)
         + (1 / eta**3) * delta_lambda0)
 
-    e3 = p * ca.sqrt(delta_i**2 + delta_Omega**2 * ca.sin(i)**2)
+    e3 = p * safe_sqrt(delta_i**2 + delta_Omega**2 * ca.sin(i)**2)
 
 
     # Calculate alpha_0 and beta_0
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
     alpha_denominator = (1 + eta) * (delta_q2 - q1 * delta_lambda0) - q2 * (q1 * delta_q1 + q2 * delta_q2)
-    alpha_0 = ca.atan2(alpha_numerator, alpha_denominator)
+    alpha_0 = safe_atan2(alpha_numerator, alpha_denominator)
 
-    beta_0 = ca.atan2(-delta_Omega * ca.sin(i), delta_i)
+    beta_0 = safe_atan2(-delta_Omega * ca.sin(i), delta_i)
 
     # Calculate x_p, y_p, z_p
     x_p = (e1 / p) * ca.sin(u + alpha_0) * (1 + q1 * ca.cos(u) + q2 * ca.sin(u))
@@ -1347,6 +1163,8 @@ def con_chief_deputy_angle_casadi(yy, data):
     x_r = ca.mtimes(Frenet2LVLH_casadi(rr, vv), rel_f)
     x_d = x_r - x_deputy
 
+
+
     # Magnitudes
     x_r_mag = ca.norm_2(x_r)
     x_d_mag = ca.norm_2(x_d)
@@ -1355,8 +1173,46 @@ def con_chief_deputy_angle_casadi(yy, data):
 
     # Calculate angle using the cosine rule
     cos_theta = (x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2 * x_deputy_mag * x_d_mag)
-    angle_con = ca.acos(cos_theta)
+    angle_con = safe_acos(cos_theta)
     # Debug point: Check cos_theta
+
+
+    # return angle_con
+    return angle_con
+
+
+def con_chief_deputy_vec(yy, data):
+
+    NSROE = yy[0:6]
+    NSOE0 = yy[6:12]
+    alpha = yy[12]
+    #print("alpha", alpha)
+
+    range = np.array([0,-1,0])
+    range_sym = ca.MX(range)
+
+    # CasADi-based calculations
+    x_deputy = NSROE2LVLH_casadi(NSROE, NSOE0, data)
+    rr, vv = NSROE2car_casadi(NSOE0, data)
+    rel_f = ca.mtimes(C1_casadi(alpha), range_sym)
+    rel_f = ca.reshape(rel_f, 3, 1)
+    x_r = ca.mtimes(Frenet2LVLH_casadi(rr, vv), rel_f)
+    x_d = x_r - x_deputy
+
+    
+
+    # # Magnitudes
+    # x_r_mag = ca.norm_2(x_r)
+    # x_d_mag = ca.norm_2(x_d)
+    # x_deputy_mag = ca.norm_2(x_deputy)
+
+
+    # # Calculate angle using the cosine rule
+    # cos_theta = (x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2 * x_deputy_mag * x_d_mag)
+    # angle_con = safe_acos(cos_theta)
+    # # Debug point: Check cos_theta
+
+    angle_con = ca.acos(ca.dot(x_deputy, x_d) / (ca.norm_2(x_deputy) * ca.norm_2(x_d)))
 
 
     # return angle_con

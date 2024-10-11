@@ -21,11 +21,42 @@ if module_path_casadi_converter not in sys.path:
     sys.path.append(module_path_casadi_converter)
 
 # Load the CasADi versions of the functions you've converted
-from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
 
 from TwoBP import Param2NROE, M2theta
 
 print("Modules loaded successfully.")
+
+# Define RK5 integration method
+def rk5_step(f, t, x, u, dt, param):
+    k1 = f(t, x, param, u)
+    k2 = f(t + 0.25 * dt, x + 0.25 * dt * k1, param, u)
+    k3 = f(t + 0.375 * dt, x + 0.375 * dt * k2, param, u)
+    k4 = f(t + 0.923076923 * dt, x + 0.923076923 * dt * k3, param, u)
+    k5 = f(t + dt, x + dt * k4, param, u)
+    x_next = x + dt * (0.1185185185 * k1 + 0.5189863548 * k2 + 0.50613149 * k3 + 0.018963184 * k4 + 0.2374078411 * k5)
+    return x_next
+
+
+def RK4_step(f, t, y, h, *args):
+    """
+    Runge-Kutta 4th-order method for one step of integration.
+    Args:
+    - f: The function that defines the system dynamics f(t, y)
+    - t: Current time
+    - y: Current state vector
+    - h: Time step
+    - args: Additional arguments to be passed to f
+    """
+    k1 = h * f(t, y, *args)
+    k2 = h * f(t + h/2, y + k1/2, *args)
+    k3 = h * f(t + h/2, y + k2/2, *args)
+    k4 = h * f(t + h, y + k3, *args)
+    
+    # Update y
+    y_next = y + (k1 + 2*k2 + 2*k3 + k4) / 6
+    return y_next
+
 
 deg2rad = np.pi / 180
 # Parameters (same as the Python version)
@@ -58,7 +89,7 @@ print("Parameters initialized.")
 deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad])
+NOE_chief = numpy.array([6500,0.1,45*deg2rad,0.5,0.2,270.828*deg2rad])
 print("Chief initial orbital elements set.")
 
 # Assigning the state variables
@@ -123,13 +154,14 @@ yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
 # Test for Gauss equation
 mu = param["Primary"][0]
+N_points = 1000
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
-n_revol_T = 0.0005 * 365 * 24 * 60 * 60 / Torb
-n_revolution = 0.005  # n_revol_T
+n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
+n_revolution = 5  # n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
-teval = numpy.linspace(0, T_total, 1000)
+teval = numpy.linspace(0, T_total,N_points)
 
 # Simulate
 uu_o = np.zeros((2, 1))  # Control inputs
@@ -144,7 +176,7 @@ tol2 = 0.2
 d_koz = 0.3  # Define collision avoidance distance
 
 # Time discretization parameters
-N = 100  # Number of control intervals
+N = N_points  # Number of control intervals
 T = T_total  # Total time in seconds (e.g., 1 hour)
 dt = T / N
 teval = np.linspace(0, T_total, N + 1)
@@ -168,6 +200,18 @@ U = ca.MX.sym('U', 2, N)  # Control trajectory
 
 objective = -X[6, -1]  # Minimize the semi-major axis of the chief
 
+epsilon = 1e-8  # Small constant
+
+# Original objective function
+objective = -X[6, -1]  # Minimize the semi-major axis of the chief
+
+# Add Mayer cost term (sum of squares of control terms multiplied by epsilon)
+mayer_cost = epsilon * ca.sumsqr(U)
+
+# Updated objective function
+objective += mayer_cost
+
+
 print("Objective function defined.")
 
 # Collocation constraints and dynamics
@@ -183,8 +227,10 @@ for k in range(N):
     x_next = X[:, k + 1]
 
     # Compute the collocation using explicit Euler
-    xk_dot = Dynamics_casadi(t, xk, param, uk)
-    x_next_pred = xk + dt * xk_dot
+    # xk_dot = Dynamics_casadi(t, xk, param, uk)
+    x_next_pred = rk5_step(Dynamics_casadi, t, xk, uk, dt, param)
+    
+    # x_next_pred = xk + dt * xk_dot
 
 
     # Enforce the collocation constraint
@@ -234,8 +280,10 @@ for k in range(N):
 
 print("Bounds on decision variables and constraints set.")
 
+
+yy_ref = np.load("solution_x_1000.npy")
 # Set initial guess
-x_guess = np.tile(yy_o, (N + 1, 1)).T
+x_guess = yy_ref
 u_guess = np.tile(uu_o, (N, 1)).T
 
 # Flatten the initial guess for optimization

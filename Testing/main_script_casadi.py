@@ -29,6 +29,7 @@ from test_converted_functions import test_Dynamics_casadi
 # Load the CasADi versions of the functions you've converted
 from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi
 from converted_functions import loaded_polynomials
+from constrains import con_chief_deputy_angle
 import casadi as ca
 import numpy as np
 import matplotlib.pyplot as plt
@@ -38,7 +39,7 @@ import sys
 import pickle
 
 # Import the CasADi versions of the functions you've converted
-from converted_functions import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi
 from TwoBP import Param2NROE, M2theta
 
 
@@ -73,38 +74,40 @@ print("Parameters initialized.")
 
 deg2rad = numpy.pi / 180
 
-# CHECK Formation Establishment and Reconfiguration Using
-# Differential Elements in J2-Perturbed Orbits and SENGUPTA
-# Chaser spacecraft initial conditions
-# orbital elements - non singular
+# Deputy spacecraft relative orbital elements/ LVLH initial conditions
+NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
+print("Chief initial orbital elements set.")
 
-
-
-# Deputy spacecraft relative orbital  elements/ LVLH initial conditions
-# NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
-## MAKE SURE TO FOLLOW RIGHT orbital elements order
- 
-
-    # assigning the state variables
-a =NOE_chief[0]
-l =NOE_chief[1]
-i =NOE_chief[2]
-q1 =NOE_chief[3]
-q2 =NOE_chief[4]
-OM =NOE_chief[5]
+# Assigning the state variables
+a = NOE_chief[0]
+l = NOE_chief[1]
+i = NOE_chief[2]
+q1 = NOE_chief[3]
+q2 = NOE_chief[4]
+OM = NOE_chief[5]
 mu = param["Primary"][0]
 
+e = numpy.sqrt(q1**2 + q2**2)
+h = numpy.sqrt(mu*a*(1-e**2))
+term1 = (h**2)/(mu)
+eta = 1 - q1**2 - q2**2
+p = term1
+rp = a*(1-e)
+ra = a*(1+e)
 
-e=numpy.sqrt(q1**2 + q2**2)
-h=numpy.sqrt(mu*a*(1-e**2))
-term1=(h**2)/(mu)
-eta = 1- q1**2 - q2**2
-p=term1
-rp=a*(1-e)
 n = numpy.sqrt(mu/(a**3))
+print("State variables calculated.")
+print("rp", rp)
+print("ra", ra)
+print("e---", e)
+print("a---", (rp + ra) / 2)
 
-if e==0:  
+if rp < param["Primary"][1]:
+    print("Satellite is inside the Earth's radius")
+    exit()
+
+
+if e == 0:  
     u = l
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 else:
@@ -116,50 +119,57 @@ else:
     u = theta + omega_peri
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-# Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
+print("State variables assigned.")
 
-rho_1 = 0 # [m]  - radial separation 
-rho_3 =0 # [m]  - cross-track separation
-alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
-beta = 0#alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
-vd = 0 #-10 # Drift per revolutions m/resolution
-d= -1# [m] - along track separation
-rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
-print("RHO_2",rho_2)
-print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
-parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
+# Design parameters for the formation
+rho_1 = 0  # [m]  - radial separation 
+rho_3 = 0  # [m]  - cross-track separation
+alpha = 0  # [rad] - angle between the radial and along-track separation
+beta = 0  # [rad] - angle between the radial and cross-track separation
+vd = 0  # Drift per revolutions m/resolution
+d = -1  # [m] - along track separation
+rho_2 = (2*(eta**2) * d) /(3-eta**2)  # [m]  - along-track separation
+print("RHO_2", rho_2)
+print(d/1+e, d/1-e, d*(1/(2*(eta**2)) /(3-eta**2)))
+parameters = numpy.array([rho_1, rho_2, rho_3, alpha, beta, vd])
 
-print("Formation parameters",parameters)
+print("Formation parameters set:", parameters)
+
 # Initial relative orbital elements
-RNOE_0=Param2NROE(NOE_chief, parameters,param)
-# RNOE_0[0]=0
-# RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2]) 
+RNOE_0 = Param2NROE(NOE_chief, parameters, param)
+print("Initial relative orbital elements calculated.")
 
-# angle of attack for the deputy spacecraft
+# Angle of attack for the deputy spacecraft
 yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2 = 0.08  # [rad] - angle of attack = 0
-yaw_c_d=numpy.array([yaw_1,yaw_2])
+yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
+yaw_2 = yaw_2_val
+print("Yaw angles calculated, yaw_2:", yaw_2)
+# 12 -> chief yaw angle
+# 13 -> deputy yaw angle
+# 14 -> deputy 1 yaw angle
+# 15 -> deputy 2 yaw angle
+yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
 
-print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
-print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
+print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
+print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 
- 
-# statement matrix [RNOE_0,NOE_chief,yaw_c_d]
-# [6x1,6x1,2x1]
-yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
+# Statement matrix [RNOE_0, NOE_chief, yaw_c_d]
+yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
+# TIME #################################################
+N_points = 1000
+mu = param["Primary"][0]
+Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
+n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
+n_revolution = 1# n_revol_T
+T_total = n_revolution * Torb
 
-# test for gauess equation
-mu=param["Primary"][0]
-Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
-n_revol_T = 0.0005*365*24*60*60/Torb
-n_revolution=  n_revol_T
-T_total=n_revolution*Torb
+t_span = [0, T_total]
+teval = numpy.linspace(0, T_total, N_points)
 
-t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 1000)
-# K=numpy.array([k1,k2])
-
+print("Time span set.")
+print("number of revolutions", n_revolution)
+print("Total time", T_total)
 # Simulate
 uu_val = np.zeros((2, 1))  # Control inputs
 
@@ -193,6 +203,13 @@ integrated_states = result['xf'].full()  # Integrated states
 print("Integrated states:", integrated_states)
 # Print the integrated states
 print("Integrated states shape:", integrated_states.shape)
+
+time_grid = np.linspace(0, T_total, len(integrated_states[0]))
+
+# save the numpy array
+numpy.save('solution_x_100_30.npy', integrated_states)
+numpy.save('time_grid_100_30.npy', time_grid)
+
 
 # Generate the LVLH Frame positions from CasADi results
 rr_s = np.zeros((3, len(teval)))

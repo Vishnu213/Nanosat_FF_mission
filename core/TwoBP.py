@@ -287,7 +287,7 @@ def OE_Timetotheta(COE,T,mu):
 
 def M2theta(M,e,tol):
 
-    if numpy.isnan(e):
+    if numpy.isnan(e) or numpy.isnan(M):
         print("Eccentricity is not defined")
     if M < numpy.pi :
         E0=M + (e/2)
@@ -554,7 +554,7 @@ def guess_nonsingular(t,yy,param):
     
     return y_dot
 
-def guess_nonsingular_Bmat(t,yy,param):
+def guess_nonsingular_Bmat(t,yy,param,yaw):
    # Guass planetary equations
     # Input, 
     # t - time
@@ -1038,48 +1038,109 @@ def Cart2RO(RO,OE_1):
 
 
 # converts the design parameters to relative orbital elements
+import numpy as np
 
-
-def Param2NROE(NOE, parameters,data):
-
+def Param2NROE(NOE, parameters, data):
     # Convert from design parameters to relative orbital elements
-    # Taken from  C.traub paper 
+    # Taken from C.traub paper 
     # NOE=numpy.array([a,lambda_0,i,q1,q2,omega]) unpack this
     a, lambda_, i, q1, q2, omega = NOE
     
     # Unpacking the parameters
-    rho_1, rho_2, rho_3, alpha_0, beta_0,v_d = parameters
+    rho_1, rho_2, rho_3, alpha_0, beta_0, v_d = parameters
     
-    mu=data["Primary"][0]
+    mu = data["Primary"][0]
 
-    eta = numpy.sqrt(1 - q1**2 - q2**2)
+    print("Initial NOE:", NOE)
+    print("Parameters:", parameters)
+    print("Gravitational parameter (mu):", mu)
 
-    n = numpy.sqrt(mu / a**3)
+    eta = np.sqrt(1 - q1**2 - q2**2)
+    print("Eta:", eta)
 
-    e=numpy.sqrt(q1**2 + q2**2)
-    h=numpy.sqrt(mu*a*(1-e**2))
-    term1=(h**2)/(mu)
-    p=term1
+    n = np.sqrt(mu / a**3)
+    print("Mean motion (n):", n)
+
+    e = np.sqrt(q1**2 + q2**2)
+    print("Eccentricity (e):", e)
+
+    h = np.sqrt(mu * a * (1 - e**2))
+    print("Specific angular momentum (h):", h)
+
+    term1 = (h**2) / mu
+    p = term1
+    print("Semi-latus rectum (p):", p)
 
     delta_a = (-2 * eta * v_d) / (3 * n)
+    print("Delta a:", delta_a)
     
     # Equation 16 (uses 'omega' from orbital elements)
-    delta_Omega = (-rho_3 * numpy.sin(beta_0)) / (p * numpy.sin(i))
+    delta_Omega = (-rho_3 * np.sin(beta_0)) / (p * np.sin(i))
+    print("Delta Omega:", delta_Omega)
     
     # Equation 12 (uses 'lambda_' from orbital elements)
-    delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
+    delta_lambda = (rho_2 / p) - delta_Omega * np.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * np.cos(alpha_0) - q2 * np.sin(alpha_0))
+    print("Delta lambda:", delta_lambda)
     
     # Equation 13
-    delta_i = (rho_3 / p) * numpy.cos(beta_0)
+    delta_i = (rho_3 / p) * np.cos(beta_0)
+    print("Delta i:", delta_i)
     
     # Equation 14
-    delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q1 = -(1 - q1**2) * (rho_1 / p) * np.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * np.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * np.cos(i))
+    print("Delta q1:", delta_q1)
     
     # Equation 15
-    delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q2 = -(1 - q2**2) * (rho_1 / p) * np.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * np.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * np.cos(i))
+    print("Delta q2:", delta_q2)
     
     # Return as vector
-    return numpy.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
+    result = np.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
+    print("Resulting NROE:", result)
+    return result
+
+# def Param2NROE(NOE, parameters,data):
+
+#     # Convert from design parameters to relative orbital elements
+#     # Taken from  C.traub paper 
+#     # NOE=numpy.array([a,lambda_0,i,q1,q2,omega]) unpack this
+#     a, lambda_, i, q1, q2, omega = NOE
+    
+#     # Unpacking the parameters
+#     rho_1, rho_2, rho_3, alpha_0, beta_0,v_d = parameters
+    
+#     mu=data["Primary"][0]
+
+#     eta = numpy.sqrt(1 - q1**2 - q2**2)
+
+#     n = numpy.sqrt(mu / a**3)
+
+#     e=numpy.sqrt(q1**2 + q2**2)
+#     h=numpy.sqrt(mu*a*(1-e**2))
+#     term1=(h**2)/(mu)
+#     p=term1
+
+    
+
+#     delta_a = (-2 * eta * v_d) / (3 * n)
+    
+#     # Equation 16 (uses 'omega' from orbital elements)
+#     delta_Omega = (-rho_3 * numpy.sin(beta_0)) / (p * numpy.sin(i))
+    
+#     # Equation 12 (uses 'lambda_' from orbital elements)
+#     delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
+    
+#     # Equation 13
+#     delta_i = (rho_3 / p) * numpy.cos(beta_0)
+    
+#     # Equation 14
+#     delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    
+#     # Equation 15
+#     delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    
+#     # Return as vector
+#     return numpy.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
 
 
 
@@ -1254,12 +1315,12 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     test_4 = (delta_q1**2 + delta_q2**2)
     test_5 = (q1 * delta_q1 + q2 * delta_q2)**2
     test_6 = (test_2 + test_3 + test_4 - test_5)
-    print("test_1",test_1)
-    print("test_2",test_2)
-    print("test_3",test_3)
-    print("test_4",test_4)
-    print("test_5",test_5)
-    print("test_6",test_6)
+    # print("test_1",test_1)
+    # print("test_2",test_2)
+    # print("test_3",test_3)
+    # print("test_4",test_4)
+    # print("test_5",test_5)
+    # print("test_6",test_6)
     
 
     e2 = p * (delta_Omega * numpy.cos(i) + ( (1 + eta + eta**2) / (eta**3 * (1 + eta)) ) * (q2 * delta_q1 - q1 * delta_q2) 
@@ -1268,9 +1329,9 @@ def NSROE2LVLH(NSROE,NSOE0,data):
 
     e3 =   p * ((delta_i**2) + (delta_Omega**2) * (numpy.sin(i)**2))**0.5
 
-    print("e1",e1)
-    print("e2",e2)
-    print("e3",e3)
+    # print("e1",e1)
+    # print("e2",e2)
+    # print("e3",e3)
 
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
     

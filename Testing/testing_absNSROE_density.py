@@ -42,14 +42,23 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 ## ADD the packages here if you think it is needed and update it in this file.
+from pyatmos import download_sw_jb2008, read_sw_jb2008, jb2008, nrlmsise00
+from pyatmos import download_sw_nrlmsise00, read_sw_nrlmsise00
+
+# Download or update the space weather file
+swfile = download_sw_jb2008()
+swdata = read_sw_jb2008(swfile)
+
+swfile2 = download_sw_nrlmsise00()
+swdata2 = read_sw_nrlmsise00(swfile2) 
 
 ## Import our libraries here
 Library= os.path.join(os.path.dirname(os.path.abspath(__file__)),"../core")
 sys.path.insert(0, Library)
 
-from TwoBP import car2kep, kep2car, twobp_cart, gauss_eqn, Event_COE, theta2M, guess_nonsingular, M2theta, Param2NROE, guess_nonsingular_Bmat, lagrage_J2_diff, absolute_NSROE_dynamics ,NSROE2car
+from TwoBP import car2kep, kep2car, twobp_cart, gauss_eqn, Event_COE, theta2M, guess_nonsingular, M2theta, Param2NROE, guess_nonsingular_Bmat, lagrage_J2_diff ,NSROE2car
 
-
+from dynamics import absolute_NSROE_dynamics_density
 
 
 def compare_density_nn_nrlmsise_over_days(alt, u,i, model, scaler, target_scaler):
@@ -129,6 +138,10 @@ def get_density_from_nrlmsise00(alt, lat, lon, date):
         ap=4.0,  
     )
 
+    nlr=nrlmsise00(date,(lat,lon,alt),swdata2)
+    print("NRLMSISE00",nlr.nd)
+
+
     # Molar masses of different gases (in g/mol)
     molar_masses = {
     'He': 4.0026,  # Helium
@@ -137,29 +150,37 @@ def get_density_from_nrlmsise00(alt, lat, lon, date):
     'O2': 32.0,    # Oxygen molecule
     'Ar': 39.948,  # Argon
     'H': 1.008,    # Hydrogen atom
+    'N': 14.007   # Nitrogen atom
     }
 
 
+    density= nlr.rho
+    densities=nlr.nd
+
+
+
     # Densities (in g/cm³)
-    density_He = densities[0]
-    density_O = densities[1]
-    density_N2 = densities[2]
-    density_O2 = densities[3]
-    density_Ar = densities[4]
-    density_H = densities[6]
+    density_He = densities["He"]
+    density_O = densities["O"]
+    density_N2 = densities["N2"]
+    density_O2 = densities["O2"]
+    density_Ar = densities["Ar"]
+    density_H = densities["H"]
+    density_N = densities["N"]
 
     # Calculate total number density
-    total_density = density_He + density_O + density_N2 + density_O2 + density_Ar + density_H
+    total_density = density_He + density_O + density_N2 + density_O2 + density_Ar + density_H + density_N
 
     # Calculate mean molar mass in kg/mol
     mean_molar_mass = (density_He * molar_masses['He'] + density_O * molar_masses['O'] + density_N2 * molar_masses['N2'] +
-                        density_O2 * molar_masses['O2'] + density_Ar * molar_masses['Ar'] + density_H * molar_masses['H']) / total_density
+                        density_O2 * molar_masses['O2'] + density_Ar * molar_masses['Ar'] + density_H * molar_masses['H'] + density_N * molar_masses['N']) / total_density
 
 
     # Temperature at the altitude (in K)
-    temp_alt =t[1]  # Temperature at the given altitude (not exospheric temperature)
+    temp_alt =nlr.T  # Temperature at the given altitude (not exospheric temperature)
 
-    return densities[5], mean_molar_mass , temp_alt
+
+    return density, mean_molar_mass , temp_alt
 
 def ecef_to_latlon(x, y, z):
     # Longitude calculation
@@ -189,7 +210,7 @@ deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital  elements/ LVLH initial conditions
 # NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6600.1366,0,90*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
+NOE_chief = numpy.array([6500.1366,0,90*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
 ## MAKE SURE TO FOLLOW RIGHT orbital elements order
 
 
@@ -224,7 +245,7 @@ t_span=[0,T_total]
 teval=numpy.linspace(0, T_total, 2000)
 # K=numpy.array([k1,k2])
 
-sol=integrate.solve_ivp(absolute_NSROE_dynamics, t_span, yy_o,t_eval=teval,
+sol=integrate.solve_ivp(absolute_NSROE_dynamics_density, t_span, yy_o,t_eval=teval,
                         method='RK45',args=(data,),rtol=1e-13, atol=1e-10)
 
 
@@ -254,22 +275,24 @@ temp_ref = []
 u_temp = []
 
 
+jb_densities = []
+
 
 # Create a new instance of the model
 model = DensityNN()
 
 # Load the saved model parameters (state dict)
-model.load_state_dict(torch.load('density_nn_model_W10.pth', weights_only=True))
+model.load_state_dict(torch.load(r'C:\Users\vishn\Desktop\My_stuffs\Projects\SDCS group\Research\Nano_sat_casadi\Nanosat_FF_mission\helper_files\density_nn_model_W10.pth', weights_only=True))
 
 # Set the model to evaluation mode if you are going to use it for inference
 model.eval()
 
 # Load the MinMaxScaler for input data
-with open('scaler_W10.pkl', 'rb') as f:
+with open(r'C:\Users\vishn\Desktop\My_stuffs\Projects\SDCS group\Research\Nano_sat_casadi\Nanosat_FF_mission\helper_files\scaler_W10.pkl', 'rb') as f:
     scaler = pickle.load(f)
 
 # Load the MinMaxScaler for target data
-with open('target_scaler_W10.pkl', 'rb') as f:
+with open(r'C:\Users\vishn\Desktop\My_stuffs\Projects\SDCS group\Research\Nano_sat_casadi\Nanosat_FF_mission\helper_files\target_scaler_W10.pkl', 'rb') as f:
     target_scaler = pickle.load(f)
 
 
@@ -277,8 +300,7 @@ with open('target_scaler_W10.pkl', 'rb') as f:
 for i in range(0,len(sol.y[0])):
     # if sol.y[5][i]>2*numpy.pi:
     #     sol.y[5][i]= 
-    if sol.y[1][i]>2:
-        print("lambda",sol.y[1][i])
+
     rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
                                                sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
     current_date = initial_date + timedelta(seconds=i * time_step)
@@ -334,6 +356,11 @@ for i in range(0,len(sol.y[0])):
 
     # Get the density at the current location
     density, mean_molar_mass, temp = get_density_from_nrlmsise00(r_rad, lat, lon, current_date)
+
+    # JB2008 density
+    jb08 = jb2008(current_date, (lat, lon, r_rad), swdata)
+    jb_densities.append(jb08.rho)  # Append the density to the JB2008 list
+
     # print("Density",density, "radius",r_rad, "error",err,"rr",r_r)
     # print("Molar Mass",mean_molar_mass)
     # print("Temperature",temp)
@@ -382,6 +409,7 @@ print(f"Length of teval_sliced: {len(sub_teval)}")  # Should now be 1000
 # Plotting the density comparison
 plt.figure(figsize=(10, 6))
 plt.plot(sub_teval, den_ref, label='NRLMSISE-00 Reference Density', color='b', marker='o')
+plt.plot(sub_teval, jb_densities, label='JB density', color='k', linestyle='--')
 plt.plot(sub_teval, density_nn_100_days, label='Neural Network Predicted Density', color='r', linestyle='--')
 plt.xlabel('Date')
 plt.ylabel('Density (kg/m³)')
@@ -392,6 +420,30 @@ plt.grid(True)
 plt.tight_layout()
 
 
+# Plotting the density comparison
+plt.figure(figsize=(10, 6))
+plt.plot(sub_teval, den_ref, label='NRLMSISE-00 Reference Density', color='b', marker='o')
+plt.plot(sub_teval, density_nn_100_days, label='Neural Network Predicted Density', color='r', linestyle='--')
+plt.xlabel('Date')
+plt.ylabel('Density (kg/m³)')
+plt.title('Density Comparison over 10 Days')
+plt.legend()
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+
+
+# Plotting the density comparison
+plt.figure(figsize=(10, 6))
+plt.plot(sub_teval, den_ref, label='NRLMSISE-00 Reference Density', color='b', marker='o')
+plt.plot(sub_teval, jb_densities, label='JB density', color='k', linestyle='--')
+plt.xlabel('Date')
+plt.ylabel('Density (kg/m³)')
+plt.title('Density Comparison over 10 Days')
+plt.legend()
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
 
 
 # Plotting the NRLMSISE-00 Reference Density

@@ -148,11 +148,15 @@ def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
     NNSOE_den = car2NNSOE_density(rr, vv, entity_data["Primary"][0])
     i = NNSOE_den[2]
     u = NNSOE_den[3]
+    
 
     # Query the KNN model to get density, molar mass, and temperature
     #rho, M, T = query_knn(rr_mag, u, i, kdtree, density_flat, M_flat, T_flat)
+    print("rr_mag---------------",rr_mag)
     h = rr_mag - entity_data["Primary"][1]
     rho, M , T = density_get(h,u,i,model_density, scaler, target_scaler)
+    print("altitude----------------",h)
+    print("rho----------------",rho)
     # Lookup surface properties based on the angle of attack
     surface_properties = lookup_surface_properties(AOA*180/np.pi, loaded_polynomials)
     

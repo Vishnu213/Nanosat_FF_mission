@@ -20,10 +20,10 @@ if module_path_casadi_converter not in sys.path:
     sys.path.append(module_path_casadi_converter)
 
 # Load the CasADi versions of the functions you've converted
-from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_vec
 from TwoBP import Param2NROE, M2theta, NSROE2LVLH
-from dynamics import Dynamics
-from constrains import con_chief_deputy_angle
+from dynamics import Dynamics , uu_log  
+from constrains import con_chief_deputy_angle, con_chief_deputy_vec_numeric
 
 ### CasADi Path Constraints Function
 def path_constraints_casadi(t,xk, uk, param, lower, upper):
@@ -296,7 +296,11 @@ yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
 yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
 yaw_2 = yaw_2_val
 print("Yaw angles calculated, yaw_2:", yaw_2)
-yaw_c_d = numpy.array([yaw_1, yaw_2])
+# 12 -> chief yaw angle
+# 13 -> deputy yaw angle
+# 14 -> deputy 1 yaw angle
+# 15 -> deputy 2 yaw angle
+yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
 
 print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
 print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
@@ -305,11 +309,11 @@ print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
 # TIME #################################################
-N_points = 100000
+N_points = 1000
 mu = param["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution = n_revol_T
+n_revolution = 100# n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
@@ -358,12 +362,12 @@ print(f"Lower bound: {lower}, Upper bound: {upper}")
 
 
 # Define the state, control, and algebraic variables for the DAE system
-yy = ca.MX.sym('yy', 14)  # State vector
+yy = ca.MX.sym('yy', 16)  # State vector
 uu = ca.MX.sym('uu', 2)   # Control input vector
 t = ca.MX.sym('t', 1)     # Time variable
 
 print("tsdsdssssssssssssssssss",teval[0])
-alg = ca.MX.sym('alg', path_constraints_casadi(t,yy, uu, param, lower, upper).size()[0])  # Algebraic variables
+alg = ca.MX.sym('alg',1)  # Algebraic variables
 t = ca.MX.sym('t', 1)     # Time variable
 # Set up the DAE system in CasADi
 dae = {
@@ -371,7 +375,7 @@ dae = {
     #'z': alg,  # Algebraic variables (for path constraints)
     'p': uu,  # Control inputs
     'ode': Dynamics_casadi(t, yy, param, uu),  # Dynamics equations
-    #'alg': path_constraints_casadi(t,yy, uu, param, lower, upper)  # Algebraic path constraints
+    #'alg': con_chief_deputy_vec(yy, param) - yy[13,-1]  # Algebraic path constraints
 }
 
 # Define integration options
@@ -388,7 +392,7 @@ integrator = ca.integrator('integrator', 'idas', dae, integrator_options)
 
 # Initial conditions and control input
 yy0 = yy_o  # Initial state
-alg0 = path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
+alg0 = con_chief_deputy_vec_numeric(yy_o, param)-yy_o[13]#path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
 #print("Initial algebraic variables:", alg0)
 
 u0 = np.zeros(2)  # Initial control inputs
@@ -411,16 +415,20 @@ solution_x = res['xf']  # This will give you the state values for each time step
 time_grid = np.linspace(0, T_total, N_points)
 
 # Reshape the results if necessary (usually solution_x will be an array of all states over time)
-solution_x = np.array(solution_x.full()).reshape((14, N_points))  # Reshape to get [states x time points]
+solution_x = np.array(solution_x.full()).reshape((16, N_points))  # Reshape to get [states x time points]
 
 
 # Assume the integrator returns solution trajectories as 'solution_x' and 'time_grid' for plotting
 # If not, adapt it based on how 'res' returns the time evolution of 'x' (state)
 time_grid = np.linspace(0, T_total, len(solution_x[0]))
 
+# save the numpy array
+numpy.save('solution_x_100_30.npy', solution_x)
+numpy.save('time_grid_100_30.npy', time_grid)
+
 # print("Final state:", final_state)
 # print("Final algebraic constraint values:", final_alg)
-
+# exit()
 ### Plotting the Results ###
 
 # Plot semi-major axis of the chief
