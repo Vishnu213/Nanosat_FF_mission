@@ -1,6 +1,6 @@
 # 🚧 Repository Under Construction 🚧
 
-**Note:** This repository is currently a work in progress. Some features may not be fully implemented, and there may be changes to the structure and functionality. Please use it with caution.
+**Note:** This repository is currently a work in progress. Some features may not be fully implemented, and there may be changes to the structure and functionality. If in case, you wanna try or check out some codes, please use it with caution.
 
 Thank you!
 
@@ -19,13 +19,13 @@ In this work, we are proposing a guidance and control methodology for a novel ae
 
 ### Relative orbital dynamics with J2 pertubation in nearly non singular orbital element representation
 
-Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used[Roscoe]. Specifically, we are making use of mean nearly non singular orbital elements - this choice is supported by the fact that these elements only take into account the secular effects and therefore nullifying these effects will be an important part of keeping the formation configuration bounded.
+Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used [3]. Specifically, we are making use of mean nearly non singular orbital elements [9] - this choice is supported by the fact that these elements only take into account the secular effects and therefore nullifying these effects will be an important part of keeping the formation configuration bounded.
 
-Furthermore, with the introduction of parameters that can be used to geometrically define the formation flying [sengupta], we can design formation flying configurations according to our needs. 
+Furthermore, with the introduction of parameters that can be used to geometrically define the formation flying [1], we can design formation flying configurations according to our needs. 
 
 ## Design Parameters for Formation Flying
 
-Based on **Sengupta and Vadali (2007)** - _"Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits"_:
+Based on **Sengupta and Vadali (2007)** [1] - _"Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits"_:
 
 Here is an example of projected elliptical orbit. By using design parameters we can specify in which way our formation flying configuration should be.
 
@@ -40,29 +40,28 @@ Here is an example of projected elliptical orbit. By using design parameters we 
 | Adjusted Along-Track Separation | ρ<sub>2</sub> | (2 η² d) / (3 - η²) m | Based on η |
 
 ### Formation Geometry
+<img src="Readme_helper_files/case1.png" alt="Two Satellite Formation Geometry" width="60%">
 
-<div align="center">
-    <img src="Readme_helper_files/case1.png" alt="Formation Geometry" width="60%">
-</div>
+### Figure 1: Along track vs Radial
+<img src="Readme_helper_files/yvsx.png" alt="Along track vs Radial" width="50%">
 
-### Design Parameters
+### Figure 2: Along track vs Cross track
+<img src="Readme_helper_files/yvsz.png" alt="Along track vs Cross track" width="50%">
 
-<div align="center">
-    <figure>
-        <img src="Readme_helper_files/yvsx.png" alt="Along track vs Radial" width="50%">
-        <figcaption style="font-size: 0.8em; color: #555;">Figure 1: Along track vs Radial</figcaption>
-    </figure>
-    <figure>
-        <img src="Readme_helper_files/yvsz.png" alt="Along track vs Cross track" width="50%">
-        <figcaption style="font-size: 0.8em; color: #555;">Figure 2: Along track vs Cross track</figcaption>
-    </figure>
-    <figure>
-        <img src="Readme_helper_files/zvsx.png" alt="Cross track vs Radial" width="50%">
-        <figcaption style="font-size: 0.8em; color: #555;">Figure 3: Cross track vs Radial</figcaption>
-    </figure>
-</div>
+### Figure 3: Cross track vs Radial
+<img src="Readme_helper_files/zvsx.png" alt="Cross track vs Radial" width="50%">
 
+## Aerodynamic Forces Calculation
 
+For our project, as we are considering VLEO region, aerodynamic forces like drag and lift are key to the dynamics of nanosatellites. These forces can be calculated using models suited for rarefied environments, such as the Modified Sentman Model. This model considers drag and lift coefficients, which describe the aerodynamic forces acting on satellite surfaces.
+
+Drag Force: The drag force opposes the satellite’s motion and is determined by the atmospheric density, the satellite’s drag coefficient and cross-sectional area, and the relative velocity between the satellite and atmosphere.
+
+Lift Force: The lift force acts perpendicular to the drag and depends on similar factors, including the lift coefficient and the orientation of the satellite relative to its velocity.
+
+The Modified Sentman Model (detailed information can be found in [8] and [7]) is used to calculate these coefficients in VLEO, accounting for interactions between atmospheric particles and satellite surfaces. This approach models each cube face of a satellite as a flat plate and calculates the lift and drag coefficients based on the orientation and relative velocity of the satellite.
+
+These aerodynamic force calculations are essential for accurately modeling and controlling satellite behavior in low-density, free molecular flow environments like VLEO.
 
 
 
@@ -75,34 +74,51 @@ Here is an example of projected elliptical orbit. By using design parameters we 
 ```
 
 - **core** contains the functions and details related to core part of project that includes attitude dynamics models, kinematics, translation dynamics, etc.
-- **Testing** contains the test of each function/modules.
+- **Testing** contains the files for testing - for example integration of different dynamics model. 
+
 # Simulation
+
+- Entire dynamics integration can be seen by using main_script_test.py present inside Testing folder. Basically we are integrating 14 dimensional state vector with zero control input. Essentially a open loop intgration procedure. I will update this section as soon as we have more results. I assume that you install minimum required packages (run pip install -r requirement.txt before running the script) to run the script.
 
 
 
 # References
 
-**1. Sengupta, P. and Vadali, S. (2007)**  
-*Title:* Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits with Arbitrary Eccentricity  
-*DOI:* [10.2514/1.25941](https://doi.org/10.2514/1.25941)  
+## References
 
-**2. Traub, C., Fasoulas, S., and Herdrich, G. (2022)**  
-*Title:* A planning tool for optimal three-dimensional formation flight maneuvers of satellites in VLEO using aerodynamic lift and drag via yaw angle deviations  
-*DOI:* [10.1016/J.ACTAASTRO.2022.04.010](https://doi.org/10.1016/J.ACTAASTRO.2022.04.010)  
+1. **Sengupta, P., and Vadali, S. R. (2007)**  
+   *Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits with Arbitrary Eccentricity*.  
+   *DOI:* [10.2514/1.25941](https://doi.org/10.2514/1.25941)
 
-**3. Roscoe, C. W. T., Westphal, J. J., Griesbach, J. D., and Schaub, H. (2015)**  
-*Title:* Formation Establishment and Reconfiguration Using Differential Elements in J2-Perturbed Orbits  
-*Journal:* Journal of Guidance Control and Dynamics  
-*DOI:* [10.2514/1.G000999](https://doi.org/10.2514/1.G000999)  
+2. **Traub, C., Fasoulas, S., and Herdrich, G. (2022)**  
+   *A Planning Tool for Optimal Three-Dimensional Formation Flight Maneuvers of Satellites in VLEO Using Aerodynamic Lift and Drag via Yaw Angle Deviations*.  
+   *DOI:* [10.1016/J.ACTAASTRO.2022.04.010](https://doi.org/10.1016/J.ACTAASTRO.2022.04.010)
 
-**4. Curtis, Howard D. (2020)**  
-*Title:* Orbital Mechanics for Engineering Students: Revised Reprint  
-*Publisher:* Butterworth-Heinemann  
+3. **Roscoe, C. W. T., Westphal, J. J., Griesbach, J. D., and Schaub, H. (2015)**  
+   *Formation Establishment and Reconfiguration Using Differential Elements in J2-Perturbed Orbits*.  
+   *Journal:* Journal of Guidance Control and Dynamics  
+   *DOI:* [10.2514/1.G000999](https://doi.org/10.2514/1.G000999)
 
-**5. Hanspeter Schaub, John L. Junkins (2018)**  
-*Title:* Analytical Mechanics of Space Systems  
-*Publisher:* American Institute of Aeronautics and Astronautics, Incorporated  
+4. **Curtis, Howard D. (2020)**  
+   *Orbital Mechanics for Engineering Students: Revised Reprint*.  
+   *Publisher:* Butterworth-Heinemann
 
-**6. Vallado, D. A. (2001)**  
-*Title:* Fundamentals of Astrodynamics and Applications, 4th ed.  
-*Series:* Space Technology Library  
+5. **Schaub, H., and Junkins, J. L. (2018)**  
+   *Analytical Mechanics of Space Systems*.  
+   *Publisher:* American Institute of Aeronautics and Astronautics, Incorporated
+
+6. **Vallado, D. A. (2001)**  
+   *Fundamentals of Astrodynamics and Applications, 4th ed.*  
+   *Series:* Space Technology Library
+
+7. **Traub, C., Herdrich, G., and Fasoulas, S. (2020)**  
+   *Influence of Energy Accommodation on a Robust Spacecraft Rendezvous Maneuver Using Differential Aerodynamic Forces*.  
+   *Journal:* CEAS Space Journal, vol. 12, pp. 43–63. Springer
+
+8. **Sentman, L. H. (1961)**  
+   *Free Molecule Flow Theory and Its Application to the Determination of Aerodynamic Forces*.  
+   *Publisher:* Lockheed Missiles & Space Company, a Division of Lockheed Aircraft Corporation
+
+9. **Schaub, H., Vadali, S. R., Junkins, J. L., and Alfriend, K. T. (2000)**  
+   *Spacecraft Formation Flying Control Using Mean Orbit Elements*.  
+   *Journal:* The Journal of the Astronautical Sciences, vol. 48, pp. 69–87. Springer
