@@ -71,7 +71,7 @@ print("Parameters initialized.")
 deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
-NOE_chief = numpy.array([6500,0.5,40*deg2rad,0.5,0.2,45*deg2rad])
+NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
 print("Chief initial orbital elements set.")
 
 # Assigning the state variables
@@ -89,9 +89,19 @@ term1 = (h**2)/(mu)
 eta = 1 - q1**2 - q2**2
 p = term1
 rp = a*(1-e)
-n = numpy.sqrt(mu/(a**3))
+ra = a*(1+e)
 
-if e == 0:
+n = numpy.sqrt(mu/(a**3))
+print("State variables calculated.")
+print("rp", rp)
+print("ra", ra)
+print("e---", e)
+print("a---", (rp + ra) / 2)
+
+if rp < param["Primary"][1]:
+    print("Satellite is inside the Earth's radius")
+    exit()
+if e==0:
     u = l
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 else:
@@ -103,48 +113,50 @@ else:
     u = theta + omega_peri
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-print("State variables assigned.")
+# Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-# Design parameters for the formation
-rho_1 = 0  # [m]  - radial separation
-rho_3 = 0  # [m]  - cross-track separation
-alpha = 0  # [rad] - angle between the radial and along-track separation
-beta = 0  # [rad] - angle between the radial and cross-track separation
-vd = 0  # Drift per revolutions m/resolution
-d = -1  # [m] - along track separation
-rho_2 = (2*(eta**2) * d) /(3-eta**2)  # [m]  - along-track separation
-print("RHO_2", rho_2)
-print(d/1+e, d/1-e, d*(1/(2*(eta**2)) /(3-eta**2)))
-parameters = numpy.array([rho_1, rho_2, rho_3, alpha, beta, vd])
+rho_1 = 0 # [m]  - radial separation
+rho_3 =0 # [m]  - cross-track separation
+alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
+beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
+vd = 0 #-10 # Drift per revolutions m/resolution
+d= -0.2# [m] - along track separation
+rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
+print("RHO_2",rho_2)
+print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
+parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 
-print("Load numpy array for initial guass")
-# yy_ref = np.load("solution_x_200_100.npy")
-
-
-
+print("Formation parameters",parameters)
 # Initial relative orbital elements
-RNOE_0 = Param2NROE(NOE_chief, parameters, param)
-print("Initial relative orbital elements calculated.")
+RNOE_0=Param2NROE(NOE_chief, parameters,param)
+# RNOE_0[0]=0
+# RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2])
 
-# Angle of attack for the deputy spacecraft
-yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
-yaw_2 = yaw_2_val
-print("Yaw angles calculated, yaw_2:", yaw_2)
-yaw_c_d = numpy.array([yaw_1, yaw_2])
+# angle of attack for the deputy spacecraft
+yaw_1 = 90*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_2 = 0*deg2rad  # [rad] - angle of attack = 0
+# 12 -> chief yaw angle
+# 13 -> deputy yaw angle
+# 14 -> deputy 1 yaw angle
+# 15 -> deputy 2 yaw angle
+yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
+print("yaw angles",yaw_c_d)
+print("Relative orbital elements",RNOE_0)
+print("Chief orbital elements",NOE_chief)
+print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
+print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
-print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
-print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 
-# Statement matrix [RNOE_0, NOE_chief, yaw_c_d]
-yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
+# statement matrix [RNOE_0,NOE_chief,yaw_c_d]
+# [6x1,6x1,2x1]
+yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
 # Test for Gauss equation
 mu = param["Primary"][0]
 N_points = 100
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution =100  # n_revol_T
+n_revolution =30  # n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
@@ -154,7 +166,7 @@ teval = numpy.linspace(0, T_total, N_points)
 with open('state_vector_function.pkl', 'rb') as f:
     state_vector_function = pickle.load(f)
 
-yy_ref = numpy.zeros((14, len(teval)))
+yy_ref = numpy.zeros((16, len(teval)))
 for i in range(len(teval)):
     yy_ref[:, i] = state_vector_function(teval[i])
 
@@ -197,7 +209,7 @@ start_time = time.time()
 opti = ca.Opti()
 
 # Define state variables (14 states: 6 NSROE deputy, 6 NSROE chief, 2 yaw angles)
-X = opti.variable(14, N + 1)
+X = opti.variable(16, N + 1)
 
 # Define control variables (2 control variables for yaw dynamics)
 U = opti.variable(2, N)
@@ -207,10 +219,13 @@ t = ca.MX.sym('t')
 dynamics_casadi_sym = Dynamics_casadi(t, X[:, 0], param, U[:, 0])
 
 # Objective: Minimize the semi-major axis of the chief
-epsilon = 1e-8
+epsilon = 1e-7
 control_cost = epsilon * ca.sumsqr(U)
 
-opti.minimize(0.25*-X[6, -1]/1e3 + 0.8*(con_chief_deputy_vec(X, param)**2-X[13,-1]**2))
+# opti.minimize(0.25*-X[6, -1]/1e3 + 0.8*(con_chief_deputy_vec(X, param)**2-X[13,-1]**2)+ 0.01*control_cost)
+# opti.minimize(con_chief_deputy_vec(X, param)**2-X[13,-1]**2)
+opti.minimize(-X[6, -1] + epsilon*control_cost)
+
 
 # Define RK5 integration method
 def rk5_step(f, t, x, u, dt, param):
@@ -221,6 +236,27 @@ def rk5_step(f, t, x, u, dt, param):
     k5 = f(t + dt, x + dt * k4, param, u)
     x_next = x + dt * (0.1185185185 * k1 + 0.5189863548 * k2 + 0.50613149 * k3 + 0.018963184 * k4 + 0.2374078411 * k5)
     return x_next
+
+# # def rk5_step(f, t, y,u, h, param):
+# #     """
+# #     Runge-Kutta 5th-order method for one step of integration.
+# #     Args:
+# #     - f: The function that defines the system dynamics f(t, y)
+# #     - t: Current time
+# #     - y: Current state vector
+# #     - h: Time step
+# #     - args: Additional arguments to be passed to f
+# #     """
+# #     k1 = h * f(t, y, param, u)
+# #     k2 = h * f(t + h/4, y + k1/4, param, u)
+# #     k3 = h * f(t + 3*h/8, y + 3*k1/32 + 9*k2/32, param, u)
+# #     k4 = h * f(t + 12/13*h, y + 1932/2197*k1 - 7200/2197*k2 + 7296/2197*k3, param, u)
+# #     k5 = h * f(t + h, y + 439/216*k1 - 8*k2 + 3680/513*k3 - 845/4104*k4, param, u)
+# #     k6 = h * f(t + h/2, y - 8/27*k1 + 2*k2 - 3544/2565*k3 + 1859/4104*k4 - 11/40*k5, param, u)
+    
+# #     # Update y
+# #     y_next = y + 16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6
+# #     return y_next
 
 
 # Collocation constraints using RK5 for the state and dynamics
@@ -261,10 +297,10 @@ for k in range(N):
     # opti.subject_to(xk[13] <= param["PHI"][1])
 
     # # Control input constraints (torque limits)
-    opti.subject_to(uk[0] >= param["T_MAX"][0])  # Chief torque lower bound
-    opti.subject_to(uk[0] <= param["T_MAX"][1])  # Chief torque upper bound
-    opti.subject_to(uk[1] >= param["T_MAX"][0])  # Deputy torque lower bound
-    opti.subject_to(uk[1] <= param["T_MAX"][1])  # Deputy torque upper bound
+    # opti.subject_to(uk[0] >= param["T_MAX"][0])  # Chief torque lower bound
+    # opti.subject_to(uk[0] <= param["T_MAX"][1])  # Chief torque upper bound
+    # opti.subject_to(uk[1] >= param["T_MAX"][0])  # Deputy torque lower bound
+    # opti.subject_to(uk[1] <= param["T_MAX"][1])  # Deputy torque upper bound
 
     # # phi_deputy = con_chief_deputy_vec(xk, param)
     # # opti.subject_to(phi_deputy - xk[13] <= 0.1)
@@ -274,7 +310,7 @@ opti.subject_to(X[:, 0] == yy_o)
 
 
 # Set initial guesses for the optimization problem
-opti.set_initial(X, np.concatenate((yy_ref,l_colm),axis =1))
+opti.set_initial(X,np.concatenate((yy_ref,l_colm),axis =1))
 opti.set_initial(U, np.zeros((2, N)))
 
 # Solver options
@@ -312,8 +348,8 @@ try:
         # # Extract solution
         solution_x = sol.value(X)
         solution_u = sol.value(U)
-        np.save("solution_x_casadi_opt_200_uub.npy",solution_x)
-        np.save("solution_u_casadi_opt_200_uub.npy",solution_u )
+        np.save("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy",solution_x)
+        np.save("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy",solution_u )
     else:
         # Record the end time
         end_time = time.time()

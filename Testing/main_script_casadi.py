@@ -45,6 +45,7 @@ from TwoBP import Param2NROE, M2theta
 
 deg2rad = np.pi / 180
 # Parameters (same as the Python version)
+# Parameters (same as the Python version)
 param = {
     "Primary": [3.98600433e5, 6378.16, 7.2921150e-5],
     "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
@@ -61,18 +62,25 @@ param = {
         }
     },
     "N_deputies": 2,
-    "sat": [1.2, 1.2, 1.2],  # Moments of inertia
-
-    # New fields
-    "T_MAX": 23e-6,  # Nm
-    "PHI_DOT": 0.1* (np.pi / 180),  # rad/s
-    "PHI": 90 * (np.pi / 180)  # Convert 90 degrees to radians
+    "sat": [0.0412, 0.0412, 1.2],  # Moments of inertia
+    "T_MAX": 23e-6,  # Maximum torque (Nm)
+    "PHI_DOT": [0.0, 0.1],  # Limits for yaw rate (rad/s)
+    "PHI": [-np.pi / 2, np.pi / 2]  # Limits for yaw angle (rad)
 }
+
 
 
 print("Parameters initialized.")
 
+
 deg2rad = numpy.pi / 180
+
+# CHECK Formation Establishment and Reconfiguration Using
+# Differential Elements in J2-Perturbed Orbits and SENGUPTA
+# Chaser spacecraft initial conditions
+# orbital elements - non singular
+
+
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
 NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
@@ -104,10 +112,8 @@ print("a---", (rp + ra) / 2)
 
 if rp < param["Primary"][1]:
     print("Satellite is inside the Earth's radius")
-    exit()
-
-
-if e == 0:  
+    
+if e==0:  
     u = l
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 else:
@@ -119,49 +125,52 @@ else:
     u = theta + omega_peri
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-print("State variables assigned.")
+# Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-# Design parameters for the formation
-rho_1 = 0  # [m]  - radial separation 
-rho_3 = 0  # [m]  - cross-track separation
-alpha = 0  # [rad] - angle between the radial and along-track separation
-beta = 0  # [rad] - angle between the radial and cross-track separation
-vd = 0  # Drift per revolutions m/resolution
-d = -1  # [m] - along track separation
-rho_2 = (2*(eta**2) * d) /(3-eta**2)  # [m]  - along-track separation
-print("RHO_2", rho_2)
-print(d/1+e, d/1-e, d*(1/(2*(eta**2)) /(3-eta**2)))
-parameters = numpy.array([rho_1, rho_2, rho_3, alpha, beta, vd])
+rho_1 = 0 # [m]  - radial separation 
+rho_3 =0 # [m]  - cross-track separation
+alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
+beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
+vd = 0 #-10 # Drift per revolutions m/resolution
+d= -0.2# [m] - along track separation
+rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
+print("RHO_2",rho_2)
+print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
+parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 
-print("Formation parameters set:", parameters)
-
+print("Formation parameters",parameters)
 # Initial relative orbital elements
-RNOE_0 = Param2NROE(NOE_chief, parameters, param)
-print("Initial relative orbital elements calculated.")
+RNOE_0=Param2NROE(NOE_chief, parameters,param)
+# RNOE_0[0]=0
+# RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2]) 
 
-# Angle of attack for the deputy spacecraft
-yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
-yaw_2 = yaw_2_val
-print("Yaw angles calculated, yaw_2:", yaw_2)
+# angle of attack for the deputy spacecraft
+yaw_1 = 90*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_2 = 0*deg2rad  # [rad] - angle of attack = 0
 # 12 -> chief yaw angle
 # 13 -> deputy yaw angle
 # 14 -> deputy 1 yaw angle
 # 15 -> deputy 2 yaw angle
 yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
+print("yaw angles",yaw_c_d)
+print("Relative orbital elements",RNOE_0)
+print("Chief orbital elements",NOE_chief)
+print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
+print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
-print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
-print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
+ 
+# statement matrix [RNOE_0,NOE_chief,yaw_c_d]
+# [6x1,6x1,2x1]
+yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
-# Statement matrix [RNOE_0, NOE_chief, yaw_c_d]
-yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
+
 
 # TIME #################################################
-N_points = 1000
+N_points = 10000
 mu = param["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution = 1# n_revol_T
+n_revolution = 25# n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
@@ -174,7 +183,7 @@ print("Total time", T_total)
 uu_val = np.zeros((2, 1))  # Control inputs
 
 param["Init"] = [NOE_chief[4], NOE_chief[3], 0]  # Initial parameters for q1, q2, and t0
-
+param["T_period"] = Torb
 # Define the symbolic variables for CasADi integration
 t = ca.MX.sym('t')  # Time
 yy = ca.MX.sym('yy', len(yy_o))  # 14 state variables (6 NSROE for deputy, 6 NSROE for chief, 2 for yaw)
@@ -186,7 +195,7 @@ dynamics_casadi_sym = Dynamics_casadi(t, yy, param, uu)
 dynamics_function = ca.Function('dynamics', [t, yy, uu], [dynamics_casadi_sym])
 
 # Define the ODE with just state `x` and control `p`
-ode = {'x': yy, 'p': uu, 'ode': dynamics_function(t, yy, uu)}
+ode = {'x': yy, 'p': ca.vertcat(uu,t), 'ode': dynamics_function(t, yy, uu)}
 
 print(print, yy_o, uu_val)
 dynamics_output = dynamics_function(0, yy_o, uu_val)
@@ -196,7 +205,7 @@ print("!!!!!!!!!!!!!!!!Dynamics output:", dynamics_output.full())
 integrator = ca.integrator('integrator', 'cvodes', ode, {'grid': teval, 'output_t0': True})
 
 # Use the integrator with initial states and inputs
-result = integrator(x0=yy_o, p=uu_val)
+result = integrator(x0=yy_o, p=ca.vertcat(uu_val,0))
 
 # Extract results
 integrated_states = result['xf'].full()  # Integrated states

@@ -63,11 +63,11 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, C_D, C_L, area_
         lift_direction = lift_direction_temp / np.linalg.norm(lift_direction_temp)  # Normalize
         
         # Calculate the contribution to drag acceleration from this surface
-        a_drag = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_D * drag_direction
+        a_drag = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_D * drag_direction * 0
         a_drag_total += a_drag
         
         # Calculate the contribution to lift acceleration from this surface
-        a_lift = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_L * lift_direction
+        a_lift = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_L * lift_direction * 1
         a_lift_total += a_lift
     
     return a_drag_total, a_lift_total
@@ -122,11 +122,11 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA
         lift_direction = np.cross(lift_direction_normalized, v_inc_normalized)
         
         # Calculate the contribution to drag acceleration from this surface
-        a_drag = 0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction
+        a_drag = 0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 0
         a_drag_total += a_drag/spacecraft_mass
         
         # Calculate the contribution to lift acceleration from this surface
-        a_lift = 0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction
+        a_lift = 0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 0
         a_lift_total += a_lift/spacecraft_mass
     
     return a_drag_total, a_lift_total
@@ -152,11 +152,11 @@ def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
 
     # Query the KNN model to get density, molar mass, and temperature
     #rho, M, T = query_knn(rr_mag, u, i, kdtree, density_flat, M_flat, T_flat)
-    print("rr_mag---------------",rr_mag)
+    # print("rr_mag---------------",rr_mag)
     h = rr_mag - entity_data["Primary"][1]
     rho, M , T = density_get(h,u,i,model_density, scaler, target_scaler)
-    print("altitude----------------",h)
-    print("rho----------------",rho)
+    # print("altitude----------------",h)
+    # print("rho----------------",rho)
     # Lookup surface properties based on the angle of attack
     surface_properties = lookup_surface_properties(AOA*180/np.pi, loaded_polynomials)
     

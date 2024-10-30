@@ -340,15 +340,16 @@ def lagrange_J2_diff_casadi(t, yy, data):
     # Compute r
     r = (a * eta**2) / (1 + q1 * ca.cos(u) + q2 * ca.sin(u))
 
+    epsilon_j2 = 0*J2 * (Re / p)**2 * n
 
 
     # Compute each component symbolically
     component_1 = 0
-    component_2 = n + ((3/4) * J2 * (Re / p)**2 * n) * (eta * (3 * ca.cos(i)**2 - 1) + (5 * ca.cos(i)**2 - 1))
+    component_2 = n + ((3/4) * epsilon_j2) * (eta * (3 * ca.cos(i)**2 - 1) + (5 * ca.cos(i)**2 - 1))
     component_3 = 0
-    component_4 = - (3/4) * J2 * (Re / p)**2 * n * (3 * ca.cos(i)**2 - 1) * q2
-    component_5 = (3/4) * J2 * (Re / p)**2 * n * (3 * ca.cos(i)**2 - 1) * q1
-    component_6 = - (3/2) * J2 * (Re / p)**2 * n * ca.cos(i)
+    component_4 = - (3/4) * epsilon_j2 * (3 * ca.cos(i)**2 - 1) * q2
+    component_5 = (3/4) * epsilon_j2 * (3 * ca.cos(i)**2 - 1) * q1
+    component_6 = - (3/2) * epsilon_j2 * ca.cos(i)
 
     # Combine components into a vector
     f_dot = ca.vertcat(component_1, component_2, component_3, component_4, component_5, component_6)
@@ -441,6 +442,43 @@ def Frenet2LVLH_casadi(rr, vv):
     return Rot_F2LVLH
 
 
+
+def custom_wave(t, period, high_value, low_value, transition_fraction, total_orbits):
+    # Adjust the period to span over the desired number of orbits
+    total_period = total_orbits * period
+
+    # Normalize the time to the total period (to span over multiple orbits)
+    t_mod = ca.fmod(t, total_period)
+
+    # Determine the time period for the first and second halves (first half high, second half low)
+    first_half_period = (total_orbits / 2) * period
+    second_half_period = total_period - first_half_period
+    transition_time = transition_fraction * period
+
+    # Define different phases of the wave using CasADi conditional statements
+    stay_high = ca.if_else(t_mod <= first_half_period - 0.5 * transition_time, high_value, 0)
+    stay_low = ca.if_else(t_mod >= first_half_period + 0.5 * transition_time, low_value, 0)
+
+    # Smooth transition from high to low
+    transition_down = ca.if_else(
+        ca.logic_and(t_mod > first_half_period - 0.5 * transition_time, t_mod <= first_half_period),
+        high_value * 0.5 * (1 + ca.cos(ca.pi * (t_mod - (first_half_period - 0.5 * transition_time)) / transition_time)),
+        0
+    )
+
+    # Smooth transition from low to high
+    transition_up = ca.if_else(
+        ca.logic_and(t_mod > total_period - 0.5 * transition_time, t_mod <= total_period),
+        high_value * 0.5 * (1 - ca.cos(ca.pi * (t_mod - (total_period - 0.5 * transition_time)) / transition_time)),
+        0
+    )
+
+    # Combine all phases
+    wave = stay_high + stay_low + transition_down + transition_up
+    return wave
+
+
+
 def yaw_dynamics_casadi(t, yy, param, uu):
     # Extracting parameters for inertia
     Izc = param["sat"][0]  # Chief satellite's moment of inertia
@@ -453,15 +491,46 @@ def yaw_dynamics_casadi(t, yy, param, uu):
     y_dot_c = yy[14]  # Chief satellite angular velocity
     y_dot_d = yy[15]  # Deputy satellite angular velocity
 
+    T = param["T_period"]
+    
+    # Control gains
+    Kp = 100
+    Kd = 20
+    
+    # Control limits (min and max torque values)
+    control_min = -23e-4
+    control_max = 23e-4
+
+    # Custom wave applied to control yaw angle (90 degrees to 0 degrees with smooth transitions)
+    wave_output = custom_wave(t, T, 90 * ca.pi / 180, 0, 0.5,1)
+    wave_output_1 = custom_wave(t, T,0* 90 * ca.pi / 180, 0, 0.5,1)
+    
+    # PID control law for the chief satellite
+    e_current = wave_output - yy[12]  # Current error for chief
+    derivative = -y_dot_c
+    control_input = Kp * e_current + Kd * derivative
+
+    # Clip the control input for chief to the specified range
+    control_input_clipped = ca.fmin(ca.fmax(control_input, control_min), control_max)
+
     # Chief satellite yaw dynamics
     y_dynamics[0] = y_dot_c  # Derivative of yaw angle (yaw rate) for chief
-    y_dynamics[1] = (-1 / Izc) * uu[0]  # Derivative of yaw rate (angular acceleration) for chief
+    y_dynamics[2] = 1/Izc * control_input_clipped  # Derivative of yaw rate (angular acceleration) for chief
+
+    # PID control law for the deputy satellite
+    e_current_1 = wave_output_1 - yy[13]  # Current error for deputy
+    derivative_1 = -y_dot_d
+    control_input_1 = Kp * e_current_1 + Kd * derivative_1
+
+    # Clip the control input for deputy to the specified range
+    control_input_1_clipped = ca.fmin(ca.fmax(control_input_1, control_min), control_max)
 
     # Deputy satellite yaw dynamics
-    y_dynamics[2] = y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
-    y_dynamics[3] = (-1 / Izd) * uu[1]  # Derivative of yaw rate (angular acceleration) for deputy
+    y_dynamics[1] = y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
+    y_dynamics[3] = 1/Izd * control_input_1_clipped  # Derivative of yaw rate (angular acceleration) for deputy
 
     return y_dynamics
+
 
 def car2NNSOE_density_casadi(r, v, mu):
     """
@@ -555,8 +624,8 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
         lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
 
         # Compute drag and lift accelerations
-        a_drag = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_D) * drag_direction * 1e2
-        a_lift = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_L) * lift_direction * 1e2
+        a_drag = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_D) * drag_direction # 1e2
+        a_lift = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_L) * lift_direction 
 
         # Apply CasADi if_else to set a_drag and a_lift to zero if projected_area is 404
         a_drag = ca.if_else(ca.sum1(projected_area) == 404, ca.MX.zeros(3), a_drag)
@@ -836,7 +905,7 @@ def Lagrange_deri_casadi(t, yy, param):
     u = ca.if_else(e != 0, u_else, u)
     r = ca.if_else(e != 0, r_else, r)
 
-    epsilon = J2 * (Re / p)**2 * n
+    epsilon = 0*J2 * (Re / p)**2 * n
 
     w_dot = (3 * epsilon / 4) * (5 * ca.cos(i)**2 - 1)
     q1_dot = q1_0 * ca.cos(w_dot * (t - t0)) - q2_0 * ca.sin(w_dot * (t - t0))
@@ -1242,7 +1311,7 @@ def Dynamics_with_PID_casadi(t, yy, param, uu):
 
 
     # Modify the yaw dynamics with the PID control input
-    y_dot_yaw = yaw_dynamics_casadi(t, yy[12:14], param, ca.vertcat(u_pid, u[1]))
+    y_dot_yaw = yaw_dynamics_casadi(t, yy, param, ca.vertcat(u_pid, u[1]))
 
     u_control_var = ca.vertcat(u_pid, u[1],phi_desired,phi_actual)
 
@@ -1288,3 +1357,61 @@ def con_chief_deputy_vec(yy, data):
 
     # return angle_con
     return angle_con
+
+
+
+##############################################
+
+import casadi as ca
+
+def Dynamics_with_zero_latitude_casadi(t, yy, param, uu):
+    """
+    Modified CasADi dynamics function with mean argument of latitude set to zero.
+    """
+    start_idx = 0
+    # Set mean argument of latitude l = 0 for the chief's state
+    chief_state = ca.vertcat(yy[0], 0, yy[2], yy[3], yy[4], yy[5])  # Set l = 0 (yy[1] is the mean argument of latitude)
+
+    # Use the CasADi function for absolute NSROE dynamics
+    y_dot_chief, u_c = absolute_NSROE_dynamics_casadi(t, chief_state, param, yy)
+
+    # Get the relative orbital elements of the deputy
+    delta_NSROE = yy[start_idx:start_idx + 6]  # Relative orbital elements of deputy
+
+    # Set delta_lambda = 0 for the relative orbital dynamics
+    delta_NSROE_mod = ca.vertcat(delta_NSROE[0], 0, delta_NSROE[2], delta_NSROE[3], delta_NSROE[4], delta_NSROE[5])  # Set delta_lambda = 0
+
+    # Calculate the absolute orbital elements by summing the deltas with the modified chief NSROE
+    deputy_NSOE = chief_state + delta_NSROE_mod
+
+    # Convert NSROE to Cartesian coordinates for the deputy
+    rr_deputy, vv_deputy = NSROE2car_casadi(deputy_NSOE, param)
+
+    # Prepare data for each deputy
+    satellite_key = f"deputy_1"
+    satellite_properties = param["satellites"][satellite_key]
+    data_deputy = {}
+    data_deputy['Primary'] = param['Primary']
+    data_deputy['S/C'] = [satellite_properties["mass"], satellite_properties["area"]]
+
+    # Compute forces for the deputy
+    u_deputy = compute_forces_for_entities_casadi(data_deputy, loaded_polynomials, yy[13], vv_deputy, rr_deputy)
+
+    # Calculate the differential aerodynamic forces
+    u = u_deputy - u_c
+
+    # Compute the Lagrange matrix (A) and B-matrix for the deputy
+    A_deputy = Lagrange_deri_casadi(t, chief_state, param)
+    B_deputy = guess_nonsingular_Bmat_casadi(t, chief_state, param)
+
+    # Compute the relative dynamics of the deputy with the modified delta_NSROE
+    y_dot_deputy = ca.mtimes(A_deputy, delta_NSROE_mod) + ca.mtimes(B_deputy, u)
+
+    # Compute the yaw dynamics (if needed)
+    y_dot_yaw = yaw_dynamics_casadi(t, yy, param, uu)
+
+    # Concatenate the results to form the full state derivative vector
+    y = ca.vertcat(y_dot_deputy, y_dot_chief, y_dot_yaw)
+
+    return y
+

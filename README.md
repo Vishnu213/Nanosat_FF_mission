@@ -13,7 +13,43 @@ In this work, we are proposing a guidance and control methodology for a novel ae
 
 ### Relative orbital dynamics with J2 pertubation in nearly non singular orbital element representation
 
-Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used[Roscoe]. With the introduction of parameters that can be used to geometrically define the formation flying [sengupta], various trajectories are shown below.
+Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used[Roscoe]. Specifically, we are making use of mean nearly non singular orbital elements - this choice is supported by the fact that these elements only take into account the secular effects and therefore nullifying these effects will be an important part of keeping the formation configuration bounded.
+
+Furthermore, with the introduction of parameters that can be used to geometrically define the formation flying [sengupta], formation flying configurations can be obtained. 
+
+## Design Parameters for Formation Flying
+
+Based on **Sengupta and Vadali (2007)** - _"Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits"_:
+
+| Parameter               | Symbol  | Value | Description                                             |
+|-------------------------|---------|-------|---------------------------------------------------------|
+| Radial Separation       | \( \rho_1 \) | 0.1 m | Separation along the radial axis                       |
+| Cross-Track Separation  | \( \rho_3 \) | 0 m   | Separation along the cross-track axis                  |
+| Radial and Along-Track Angle | \( \alpha \) | 0 rad | Angle between radial and along-track separation         |
+| Radial and Cross-Track Angle | \( \beta \)  | \( \frac{\pi}{2} \) rad | Angle between radial and cross-track separation   |
+| Drift per Revolution    | \( v_d \) | 0.000 m | Drift per orbital revolution                           |
+| Along-Track Separation  | \( d \)  | -0.1 m | Separation along the orbital track                     |
+| Adjusted Along-Track Separation | \( \rho_2 \) | \( \frac{2 \eta^2 d}{3 - \eta^2} \) m | Based on \( \eta \) |
+
+### Diagram of Formation Geometry
+
+![Formation Geometry](images/formation_geometry.png)
+
+### Symbols and Formulae
+
+- **\\( \\rho_1 \\):** Radial separation
+- **\\( \\rho_3 \\):** Cross-track separation
+- **\\( \\alpha \\):** Angle between radial and along-track separation
+- **\\( \\beta \\):** Angle between radial and cross-track separation, given by \\( \\beta = \\alpha + 90^\\circ \\)
+- **\\( v_d \\):** Drift per orbital revolution
+- **\\( d \\):** Along-track separation
+- **\\( \\rho_2 \\):** Adjusted along-track separation, calculated as:  
+  \\[
+  \\rho_2 = \\frac{2 \\eta^2 d}{3 - \\eta^2}
+  \\]
+
+These parameters are critical to accurately modeling the relative motion and geometry of satellite formations in elliptical orbits.
+
 
 # Repo directory structure
 ```markdown

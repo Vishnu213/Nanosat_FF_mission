@@ -61,11 +61,17 @@ q1 = CEO_0[1]*numpy.sin(CEO_0[4])
 q2 = CEO_0[1]*numpy.cos(CEO_0[4])
 OM = CEO_0[3]
 
+deg2rad = numpy.pi / 180
+
+# Deputy spacecraft relative orbital elements/ LVLH initial conditions
+NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
+
+
 Torb = 2*numpy.pi*numpy.sqrt(CEO_0[0]**3/mu)    # [s]    Orbital period
 n_revolution=10
 T_total=n_revolution*Torb
 
-yy_o=numpy.array([a,l,i,q1,q2,OM])
+yy_o=NOE_chief#numpy.array([a,l,i,q1,q2,OM])
 # test for gauess equation
 
 r0=numpy.concatenate((r,v)) 

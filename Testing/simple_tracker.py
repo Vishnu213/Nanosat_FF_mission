@@ -6,8 +6,9 @@ import casadi as ca
 
 # Define the moment of inertia, proportional and derivative gains, and sine wave properties again
 Izc = 1.2        # Moment of inertia
-K_p = 1000       # Proportional gain
+K_p = 1     # Proportional gain
 K_d = 0.1         # Derivative gain
+
 A = 1.0           # Amplitude of the sine wave
 T_period = 2000.0  # Period of the sine wave
 
@@ -36,12 +37,6 @@ dae = {
     'alg': control_eqn       # Algebraic equation (PD control law)
 }
 
-# Define the moment of inertia, proportional and derivative gains, and sine wave properties
-Izc = 1.0         # Moment of inertia
-K_p = 1.0         # Proportional gain
-K_d = 0.1         # Derivative gain
-A = 1.0           # Amplitude of the sine wave
-T_period = 500.0  # Period of the sine wave
 
 # Time variable
 t = ca.MX.sym('t')  # Time
@@ -58,7 +53,7 @@ theta_desired = A * ca.sin(2 * ca.pi / T_period * t)
 control_eqn = u - K_p * (theta_desired - y)
 
 # Differential equation (yaw dynamics)
-dyn_eqn = ca.vertcat(yd, -Izc * u)  # Now we include both y_dot = yd and yd_dot = -Izc*u
+dyn_eqn = ca.vertcat(yd, Izc * u)  # Now we include both y_dot = yd and yd_dot = -Izc*u
 
 # Pack the differential and algebraic equations
 dae = {
@@ -71,7 +66,7 @@ dae = {
 
 # Set up time points for simulation
 tf = 1000  # Final time
-dt = 1.0   # Time step
+dt = 2   # Time step
 t_values = np.arange(0, tf + dt, dt)
 # Define integration options
 integrator_options = {
@@ -84,8 +79,8 @@ integrator_options = {
 integrator = ca.integrator('integrator', 'idas', dae,integrator_options)
 
 # Redefine initial conditions for integration
-y0 = [0.0, 0.0]  # Initial yaw angle and yaw rate
-u0 = 0.0         # Initial control input
+y0 = [0.02, 0.0]  # Initial yaw angle and yaw rate
+u0 = 0.02         # Initial control input
 t0= 0.0           # Initial time
 # Call the integrator once with the full time grid
 res = integrator(x0=y0, z0=u0, p=t0)

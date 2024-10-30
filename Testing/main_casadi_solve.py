@@ -144,7 +144,7 @@ print("Initial relative orbital elements calculated.")
 # Angle of attack for the deputy spacecraft
 yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
 yaw_2 = 0.08  # [rad] - angle of attack = 0
-yaw_c_d = numpy.array([yaw_1, yaw_2])
+yaw_c_d = numpy.array([yaw_1, yaw_2,0,0])
 
 print("RELATIVE ORBITAL ELEMENTS INITIAL", RNOE_0)
 print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
@@ -157,7 +157,7 @@ mu = param["Primary"][0]
 N_points = 1000
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution = 5  # n_revol_T
+n_revolution = 20  # n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]

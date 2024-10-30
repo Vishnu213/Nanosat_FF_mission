@@ -7,6 +7,7 @@
 # Ignore all .pth files
 *.pth
 *.pkl
+*.npy
 
 # specific files
 temp.txt
@@ -15,3 +16,17 @@ temp.txt
 !helper/*.pth
 !helper/*.pkl
 !
+Testing/simple_track_num.py
+Testing/simple_track_two.py
+Testing/simple_tracker.py
+Testing/solution_x_100_30.npy
+Testing/solution_x_100_30.npy
+
+Testing/test_mean_osculating.py
+Testing/test_wave.py
+Testing/time_grid_100_30.npy
+Testing/Jacbian_casadi.py
+Testing/main_casadi_solve.py
+Testing/main_casadi_solve.py
+Testing/simple_tracker.py
+
