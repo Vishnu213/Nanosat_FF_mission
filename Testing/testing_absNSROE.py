@@ -21,11 +21,10 @@ import math
 Library= os.path.join(os.path.dirname(os.path.abspath(__file__)),"../core")
 sys.path.insert(0, Library)
 
-from TwoBP import car2kep, kep2car, twobp_cart, gauss_eqn, Event_COE, theta2M, guess_nonsingular, M2theta, Param2NROE, guess_nonsingular_Bmat, lagrage_J2_diff, absolute_NSROE_dynamics ,NSROE2car
+from TwoBP import MEANNSOE2OSCOE, car2kep, kep2car, twobp_cart, gauss_eqn, Event_COE, theta2M, guess_nonsingular, M2theta, Param2NROE, guess_nonsingular_Bmat, lagrage_J2_diff,NSROE2car
 
-
+from dynamics import absolute_NSROE_dynamics_density
 # Parameters that is of interest to the problem
-
 data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
 deg2rad = numpy.pi / 180
 
@@ -38,7 +37,7 @@ deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital  elements/ LVLH initial conditions
 # NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6800.1366,0,90*deg2rad,0.005,0,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
+NOE_chief = numpy.array([6800,0.1,90*deg2rad,0.001,0.003,270.828*deg2rad])
 ## MAKE SURE TO FOLLOW RIGHT orbital elements order
 
 
@@ -66,15 +65,15 @@ yy_o=NOE_chief
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
 n_revol_T = 24*60*60/Torb
-n_revolution=100#n_revol_T
+n_revolution=10000#n_revol_T
 T_total=n_revolution*Torb
 
 t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 20000)
+teval=numpy.linspace(0, T_total, 200000)
 # K=numpy.array([k1,k2])
 
-sol=integrate.solve_ivp(absolute_NSROE_dynamics, t_span, yy_o,t_eval=teval,
-                        method='RK45',args=(data,),rtol=1e-13, atol=1e-10)
+sol=integrate.solve_ivp(absolute_NSROE_dynamics_density, t_span, yy_o,t_eval=teval,
+                        method='RK23',args=(data,),rtol=1e-15, atol=1e-12)
 
 
 # Convert from NROE to Carterian co-ordinates. 
@@ -83,17 +82,28 @@ sol=integrate.solve_ivp(absolute_NSROE_dynamics, t_span, yy_o,t_eval=teval,
 
 rr_s=numpy.zeros((3,len(sol.y[0])))
 vv_s=numpy.zeros((3,len(sol.y[0])))
+NSCOE_OS=numpy.zeros((8,len(sol.y[0])))
+
+normal_r = numpy.zeros((len(sol.y[0])))
 
 for i in range(0,len(sol.y[0])):
     # if sol.y[5][i]>2*numpy.pi:
     #     sol.y[5][i]= 
-    if sol.y[1][i]>2000:
-        print("lambda",sol.y[1][i])
+    # if sol.y[1][i]>2000:
+        # print("lambda",sol.y[1][i])
     rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
                                                sol.y[3][i],sol.y[4][i],sol.y[5][i]]),data)
-    print(rr_s[:,i],vv_s[:,i])
-    print(sol.y[0][i],sol.y[1][i],sol.y[2][i], sol.y[3][i],sol.y[4][i],sol.y[5][i])
-
+    NSCOE_OS[:,i]=MEANNSOE2OSCOE(numpy.array([sol.y[0][i],sol.y[1][i],sol.y[2][i],
+                                               sol.y[3][i],sol.y[4][i],sol.y[5][i]]))
+    # print("OSCOE",NSCOE_OS)
+    normal_r[i]=numpy.linalg.norm(rr_s[:,i])
+    # print(rr_s[:,i],vv_s[:,i])
+    # print(sol.y[0][i],sol.y[1][i],sol.y[2][i], sol.y[3][i],sol.y[4][i],sol.y[5][i])
+    rp = numpy.linalg.norm(rr_s[:,i])
+    # print(rp,sol.y[0][i])
+    if  rp< data["Primary"][1]:
+        print("Satellite is inside the Earth's radius")
+        exit()
 
 
 
@@ -160,6 +170,7 @@ fig, axs = plt.subplots(3, 1)
 # Plot data on the first subplot
 axs[0].plot(teval, sol.y[0])
 axs[0].set_title('semi major axis')
+print(min(sol.y[0]),max(sol.y[0]))
 
 # Plot data on the second subplot
 axs[1].plot(teval, sol.y[1])
@@ -182,5 +193,22 @@ axs[1].set_title('q2')
 axs[2].plot(teval, sol.y[5])
 axs[2].set_title('right ascenstion of ascending node')
 
+
+fig, axs = plt.subplots(3, 3, figsize=(15, 15))
+
+# Flatten the axes array for easy iteration
+axs = axs.flatten()
+
+for i in range(8):
+    axs[i].plot(teval,NSCOE_OS[i])
+    axs[i].set_title(f'NSCOE_O[{i}]')
+
+# Plot "Normal R" data on the final
+fig=plt.figure()
+ax = plt.axes()
+ax.plot(teval,normal_r)
+ax.set_title('Normal R')
+# Adjust layout for better spacing
+plt.tight_layout()
 plt.show()
 

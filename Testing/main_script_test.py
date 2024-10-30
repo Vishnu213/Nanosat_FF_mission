@@ -1,16 +1,17 @@
 """
 Nanosat Formation Flying Project
 
-Relative dynamics of two nanosatellites are defined here with J2 perturbation. Taken from paper: 
-A planning tool for optimal three-dimensional formation flight maneuvers of satellites in VLEO using aerodynamic lift and drag via yaw angle deviations  
-Traub, C., Fasoulas, S., and Herdrich, G. (2022). 
+Relative dynamics of two nanosatellites are defined here with J2 perturbation. Taken from paper:
+A planning tool for optimal three-dimensional formation flight maneuvers of satellites in VLEO using aerodynamic lift and drag via yaw angle deviations
+Traub, C., Fasoulas, S., and Herdrich, G. (2022).
 
 Author:
-    Vishnuvardhan Shakthibala 
-    
+    Vishnuvardhan Shakthibala
+
 """
-## Copy the following lines of code 
+## Copy the following lines of code
 # FROM HERE
+import numpy as np
 import numpy
 from scipy import integrate
 import matplotlib.pyplot as plt
@@ -18,6 +19,9 @@ import os
 import sys
 import math
 import time
+
+from scipy.interpolate import interp1d
+import pickle
 ## ADD the packages here if you think it is needed and update it in this file.
 
 ## Import our libraries here
@@ -25,23 +29,33 @@ Library= os.path.join(os.path.dirname(os.path.abspath(__file__)),"../core")
 sys.path.insert(0, Library)
 
 from TwoBP import (
-    car2kep, 
-    kep2car, 
-    twobp_cart, 
-    gauss_eqn, 
-    Event_COE, 
-    theta2M, 
-    M2theta, 
-    Param2NROE, 
-    guess_nonsingular_Bmat, 
-    lagrage_J2_diff, 
+    car2kep,
+    kep2car,
+    twobp_cart,
+    gauss_eqn,
+    Event_COE,
+    theta2M,
+    M2theta,
+    Param2NROE,
+    guess_nonsingular_Bmat,
+    lagrage_J2_diff,
     NSROE2car,
     NSROE2LVLH,
-    NSROE2LVLH_2)
+    NSROE2LVLH_2,
+       )
 
-from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics
-from constrains import con_chief_deputy_angle
+from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics, uu_log
+from constrains import con_chief_deputy_angle, con_chief_deputy_vec_numeric
+
 from integrators import integrate_system
+
+
+class StateVectorInterpolator:
+    def __init__(self, teval, solution_x):
+        self.interpolating_functions = [interp1d(teval, solution_x[i, :], kind='linear', fill_value="extrapolate") for i in range(solution_x.shape[0])]
+
+    def __call__(self, t):
+        return np.array([f(t) for f in self.interpolating_functions])
 
 
 # Parameters that is of interest to the problem
@@ -64,8 +78,8 @@ data = {
         }
     },
     "N_deputies": 2,  # Number of deputies
-    "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
-
+    "sat": [0.0412, 0.0412,1.2],  # Moment of inertia for each satellite
+    "T_period": 2000.0,  # Period of the sine wave
 }
 
 print("Parameters initialized.")
@@ -79,31 +93,38 @@ deg2rad = numpy.pi / 180
 
 
 
-# Deputy spacecraft relative orbital  elements/ LVLH initial conditions
-# NOE_chief = numpy.array([a,lambda_0,i,q1,q2,omega])
-NOE_chief = numpy.array([6500,0.1,63.45*deg2rad,0.5,0.2,270.828*deg2rad]) # numpy.array([6803.1366,0,97.04,0.005,0,270.828])
-## MAKE SURE TO FOLLOW RIGHT orbital elements order
- 
+# Deputy spacecraft relative orbital elements/ LVLH initial conditions
+NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
+print("Chief initial orbital elements set.")
 
-    # assigning the state variables
-a =NOE_chief[0]
-l =NOE_chief[1]
-i =NOE_chief[2]
-q1 =NOE_chief[3]
-q2 =NOE_chief[4]
-OM =NOE_chief[5]
+# Assigning the state variables
+a = NOE_chief[0]
+l = NOE_chief[1]
+i = NOE_chief[2]
+q1 = NOE_chief[3]
+q2 = NOE_chief[4]
+OM = NOE_chief[5]
 mu = data["Primary"][0]
 
+e = numpy.sqrt(q1**2 + q2**2)
+h = numpy.sqrt(mu*a*(1-e**2))
+term1 = (h**2)/(mu)
+eta = 1 - q1**2 - q2**2
+p = term1
+rp = a*(1-e)
+ra = a*(1+e)
 
-e=numpy.sqrt(q1**2 + q2**2)
-h=numpy.sqrt(mu*a*(1-e**2))
-term1=(h**2)/(mu)
-eta = 1- q1**2 - q2**2
-p=term1
-rp=a*(1-e)
 n = numpy.sqrt(mu/(a**3))
+print("State variables calculated.")
+print("rp", rp)
+print("ra", ra)
+print("e---", e)
+print("a---", (rp + ra) / 2)
 
-if e==0:  
+if rp < data["Primary"][1]:
+    print("Satellite is inside the Earth's radius")
+    exit()
+if e==0:
     u = l
     r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 else:
@@ -117,12 +138,12 @@ else:
 
 # Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-rho_1 = 0 # [m]  - radial separation 
+rho_1 = 0.1 # [m]  - radial separation
 rho_3 =0 # [m]  - cross-track separation
 alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
 beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
-vd = 0 #-10 # Drift per revolutions m/resolution
-d= -1# [m] - along track separation
+vd = 0.000 #-10 # Drift per revolutions m/resolution
+d= -0.1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
 print("RHO_2",rho_2)
 print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
@@ -131,18 +152,24 @@ parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 print("Formation parameters",parameters)
 # Initial relative orbital elements
 RNOE_0=Param2NROE(NOE_chief, parameters,data)
-# RNOE_0[0]=0
-# RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2]) 
+RNOE_0[0]=0
+RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2])
 
 # angle of attack for the deputy spacecraft
-yaw_1 = 0.12  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2 = 0.08  # [rad] - angle of attack = 0
-yaw_c_d=numpy.array([yaw_1,yaw_2])
-
+yaw_1 = 90*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_2 = 0*deg2rad  # [rad] - angle of attack = 0
+# 12 -> chief yaw angle
+# 13 -> deputy yaw angle
+# 14 -> deputy 1 yaw angle
+# 15 -> deputy 2 yaw angle
+yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
+print("yaw angles",yaw_c_d)
+print("Relative orbital elements",RNOE_0)
+print("Chief orbital elements",NOE_chief)
 print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
 print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
- 
+
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
 # [6x1,6x1,2x1]
 yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
@@ -152,15 +179,17 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
 n_revol_T = 0.0005*365*24*60*60/Torb
-n_revolution=  n_revol_T
+n_revolution=  10 #n_revol_T
 T_total=n_revolution*Torb
+print("Orbital period",Torb)
+
 
 t_span=[0,T_total]
 teval=numpy.linspace(0, T_total, 100000)
 # K=numpy.array([k1,k2])
- 
-data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
 
+data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
+data["T_period"] = Torb
 uu = numpy.zeros((2,1)) # input torque to the dynamics model - it is fed inside the yaw dynamics.
 
 print("Number of Period",n_revolution)
@@ -173,46 +202,77 @@ print("Integration starting....")
 # Start the timer
 start_time = time.time()
 
-# sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-#                         method='DOP853',args=(data,uu), rtol=1e-10, atol=1e-12,dense_output=True)
+sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
+                        method='RK45',args=(data,uu), rtol=1e-13, atol=1e-11,dense_output=True)
 
-h=10 * (teval[2]-teval[1])
-print("Time step......h : ",h)
-t_values, sol_y = integrate_system("RK4", Dynamics,teval, yy_o,h, data, uu)
+# Check solver status
+if sol.status != 0:
+    print(f"Solver stopped early with status {sol.status}: {sol.message}")
+    exit()
+
+# h=0.1*(T_total)/(len(teval)) 
+# print("Time step......h : ",h)
+# t_values, sol_y = integrate_system("RK5", Dynamics,teval, yy_o,h, data, uu)
 # End the timer
 end_time = time.time()
 
 # Calculate the time taken
 execution_time = end_time - start_time
 
+# teval = t_values
+
+sol_y = sol.y
+
+teval = sol.t
+
+
+# teval = t_values
+
+print("Integration done....")
+print("time",teval.shape,teval[0],teval[-1])
+print("sol_y",sol_y.shape)
+state_vector_function = StateVectorInterpolator(teval, sol_y)
+
+print("Interpolating function created successfully.")
+
+
+# # Save the function using pickle
+with open('state_vector_function.pkl', 'wb') as f:
+    pickle.dump(state_vector_function, f)
+
+print("Interpolating function saved successfully.")
+
 # Print the execution time
 print(f"Time taken for integration: {execution_time:.4f} seconds")
 
 print("Integration done....")
 
-# Convert from NROE to Carterian co-ordinates. 
+# Convert from NROE to Carterian co-ordinates.
 rr_s=numpy.zeros((3,len(sol_y[0])))
 vv_s=numpy.zeros((3,len(sol_y[0])))
 angle_con_array=numpy.zeros((len(sol_y[0])))
 
+
+
+
 for i in range(0,len(sol_y[0])):
     # if sol_y[5][i]>2*numpy.pi:
-    #     sol_y[5][i]= 
- 
+    #     sol_y[5][i]=
+
     # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol_y[0][i],sol_y[1][i],sol_y[2][i],
     #                                            sol_y[3][i],sol_y[4][i],sol_y[5][i]]),data)
-    
+
     yy1=sol_y[0:6,i]
     yy2=sol_y[6:12,i]
-    if yy2[1]>2000:
-        print("ANOMALY",yy2[1])
-    print("yy1",yy1)
-    print("yy2",yy2)
+    # if yy2[1]>2000:
+    #     print("ANOMALY",yy2[1])
+    # print("yy1",yy1)
+    # print("yy2",yy2)
     rr_s[:,i]=NSROE2LVLH(yy1,yy2,data)
-    angle_con=con_chief_deputy_angle(sol_y[:,i],data)
+    angle_con=con_chief_deputy_vec_numeric(sol_y[:,i],data)
     angle_con_array[i] = angle_con
 
-    print("############# constains angle", angle_con)
+    # print("############# constains angle", angle_con)
 
     # h = COE[0]
     # e =COE[1]
@@ -221,9 +281,16 @@ for i in range(0,len(sol_y[0])):
     # om =COE[4]
     # TA =COE[5]
 
-    
+
 print("mean position in x",numpy.mean(rr_s[0]))
 print("mean position in y",numpy.mean(rr_s[1]))
+print("mean position in z",numpy.mean(angle_con_array))
+if np.isnan(sol_y).any():
+    print("NAN values in the solution")
+    exit()
+else:
+    print("No NAN values in the solution")
+
 # Spherical earth
 # Setting up Spherical Earth to Plot
 N = 50
@@ -349,6 +416,25 @@ def update_dynamic_frame(event):
 # Connect the update function to the interactive plot (ax1)
 ax1.figure.canvas.mpl_connect('motion_notify_event', update_dynamic_frame)
 
+
+# LVLH frame
+# Create a 3D plot
+fig = plt.figure(figsize=(10, 6))
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the 3D trajectory
+ax.plot(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
+
+# Plot the origin
+ax.plot([0], [0], [0], 'ro', linewidth=2, alpha=1)
+
+# Set plot labels and title
+ax.set_title('LVLH frame - Deputy Spacecraft')
+ax.set_xlabel('Radial (m)')
+ax.set_ylabel('Along track (m)')
+ax.set_zlabel('Cross track (m)')
+
+
 # Show the zoomed plot
 plt.show()
 
@@ -379,7 +465,7 @@ axs[1].set_title('mean true latitude')
 
 axs[2].plot(teval, sol_y[2])
 axs[2].set_title('inclination')
- 
+
 
 fig, axs = plt.subplots(3, 1)
 
@@ -396,35 +482,33 @@ axs[2].set_title('right ascenstion of ascending node')
 
 
 
-x = rr_s[0]
-y = rr_s[1]
-z = rr_s[2]
-# Plot x and y
+radial = rr_s[0]
+along_track = rr_s[1]
+cross_track = rr_s[2]
+
+# Plot radial and along_track
 plt.figure(5)
-plt.plot(x, y, label='x vs y')
-plt.xlabel('x')
-plt.ylabel('y')
+plt.plot(radial, along_track, label='Along track vs Radial')
+plt.xlabel('Radial (m)')
+plt.ylabel('Along track (m)')
 plt.legend()
-plt.title('Plot of x vs y')
+plt.title('Plot of Along track vs Radial')
 
-
-# Plot z and y
+# Plot cross_track and along_track
 plt.figure(6)
-plt.plot(z, y, label='z vs y', color='g')
-plt.xlabel('z')
-plt.ylabel('y')
+plt.plot(cross_track, along_track, label='Along track vs Cross track', color='g')
+plt.xlabel('Cross track (m)')
+plt.ylabel('Along track (m)')
 plt.legend()
-plt.title('Plot of z vs y')
+plt.title('Plot of Along track vs Cross track')
 
-
-# Plot x and z
+# Plot radial and cross_track
 plt.figure(7)
-plt.plot(x, z, label='x vs z', color='r')
-plt.xlabel('x')
-plt.ylabel('z')
+plt.plot(radial, cross_track, label='Cross track vs Radial', color='r')
+plt.xlabel('Radial (m)')
+plt.ylabel('Cross track (m)')
 plt.legend()
-plt.title('Plot of x vs z')
-
+plt.title('Plot of Cross track vs Radial')
 
 
 
@@ -443,4 +527,24 @@ axs[2].plot(teval, angle_con_array)
 axs[2].set_title('Constrains angle')
 
 
+# After integration
+uu_log1 = np.array(uu_log)  # Convert to numpy array
+
+# Check the shape of uu_log (it should be Nx2, where N is the number of time steps)
+print(f"uu_log shape: {uu_log1.shape}")
+
+# Plotting the results for both components of uu
+plt.figure()
+plt.plot(uu_log1[:, 0], label='uu component 1')  # First column
+plt.plot(uu_log1[:, 1], label='uu component 2')  # Second column
+plt.xlabel('Time (s)')
+plt.ylabel('Input torque (uu)')
+plt.title('Evolution of uu over time')
+plt.legend()
 plt.show()
+
+plt.show()
+
+
+
+

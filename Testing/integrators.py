@@ -32,7 +32,8 @@ def RK5_integrator(f, t_span, y0, h, args=()):
     - h: Time step size
     - args: Additional arguments to pass to f
     """
-    t0, tf = t_span
+    t0=t_span[0]
+    tf=t_span[-1]    
     t_values = [t0]
     y_values = [y0]
     

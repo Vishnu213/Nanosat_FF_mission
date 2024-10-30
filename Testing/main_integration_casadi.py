@@ -20,10 +20,14 @@ if module_path_casadi_converter not in sys.path:
     sys.path.append(module_path_casadi_converter)
 
 # Load the CasADi versions of the functions you've converted
+<<<<<<< HEAD
 from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_angle_casadi, Dynamics_with_PID_casadi
+=======
+from converted_functions_original import Dynamics_casadi, NSROE2LVLH_casadi, con_chief_deputy_vec
+>>>>>>> main_dev_testing
 from TwoBP import Param2NROE, M2theta, NSROE2LVLH
-from dynamics import Dynamics
-from constrains import con_chief_deputy_angle
+from dynamics import Dynamics , uu_log  
+from constrains import con_chief_deputy_angle, con_chief_deputy_vec_numeric
 
 ### CasADi Path Constraints Function
 def path_constraints_casadi(t,xk, uk, param, lower, upper):
@@ -236,7 +240,7 @@ param = {
         }
     },
     "N_deputies": 2,
-    "sat": [1.2, 1.2, 1.2],  # Moments of inertia
+    "sat": [0.0412, 0.0412, 1.2],  # Moments of inertia
     "T_MAX": 23e-6,  # Maximum torque (Nm)
     "PHI_DOT": [0.0, 0.1],  # Limits for yaw rate (rad/s)
     "PHI": [-np.pi / 2, np.pi / 2],  # Limits for yaw angle (rad)
@@ -250,8 +254,7 @@ print("Parameters initialized.")
 deg2rad = numpy.pi / 180
 
 # Deputy spacecraft relative orbital elements/ LVLH initial conditions
-NOE_chief = numpy.array([6600,0.1,45*deg2rad,0.5,0.2,45*deg2rad])
-print("Chief initial orbital elements set.")
+NOE_chief = numpy.array([6600,0.1,63.45*deg2rad,0.001,0.003,270.828*deg2rad])
 
 # Assigning the state variables
 a = NOE_chief[0]
@@ -268,7 +271,18 @@ term1 = (h**2)/(mu)
 eta = 1 - q1**2 - q2**2
 p = term1
 rp = a*(1-e)
+ra = a*(1+e)
+
 n = numpy.sqrt(mu/(a**3))
+print("State variables calculated.")
+print("rp", rp)
+print("ra", ra)
+print("e---", e)
+print("a---", (rp + ra) / 2)
+
+if rp < param["Primary"][1]:
+    print("Satellite is inside the Earth's radius")
+    exit()
 
 if e == 0:  
     u = l
@@ -303,11 +317,21 @@ RNOE_0 = Param2NROE(NOE_chief, parameters, param)
 print("Initial relative orbital elements calculated.")
 
 # Angle of attack for the deputy spacecraft
+<<<<<<< HEAD
 yaw_1 = 0.45  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
 yaw_2_val = con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
 yaw_2 = 0.2
+=======
+yaw_1 = 45* deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_2_val = -0 * deg2rad#con_chief_deputy_angle(numpy.concatenate((RNOE_0, NOE_chief,np.zeros(2))), param)
+yaw_2 = yaw_2_val
+>>>>>>> main_dev_testing
 print("Yaw angles calculated, yaw_2:", yaw_2)
-yaw_c_d = numpy.array([yaw_1, yaw_2])
+# 12 -> chief yaw angle
+# 13 -> deputy yaw angle
+# 14 -> deputy 1 yaw angle
+# 15 -> deputy 2 yaw angle
+yaw_c_d=numpy.array([yaw_1,yaw_2,0,0])
 
 PID_state = numpy.array([yaw_2_val-yaw_2, 0, 0])  # Initial PID state
 
@@ -318,11 +342,19 @@ print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d, PID_state))
 
 # TIME #################################################
+<<<<<<< HEAD
 N_points = 1000
 mu = param["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.00005 * 365 * 24 * 60 * 60 / Torb
 n_revolution = n_revol_T
+=======
+N_points = 10000
+mu = param["Primary"][0]
+Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
+n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
+n_revolution = 500# n_revol_T
+>>>>>>> main_dev_testing
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
@@ -335,7 +367,7 @@ print("Total time", T_total)
 uu_o = np.zeros((2, 1))  # Control inputs
 
 param["Init"] = [NOE_chief[4], NOE_chief[3], 0]  # Initial parameters for q1, q2, and t0
-
+param["T_period"] = Torb
 print("Simulation parameters set.")
 
 # Setup tolerances and other required variables
@@ -371,21 +403,35 @@ print(f"Lower bound: {lower}, Upper bound: {upper}")
 
 
 # Define the state, control, and algebraic variables for the DAE system
+<<<<<<< HEAD
 yy = ca.MX.sym('yy', 17)  # State vector
+=======
+yy = ca.MX.sym('yy', 16)  # State vector
+>>>>>>> main_dev_testing
 uu = ca.MX.sym('uu', 2)   # Control input vector
 t = ca.MX.sym('t', 1)     # Time variable
 
 print("tsdsdssssssssssssssssss",teval[0])
+<<<<<<< HEAD
 alg = ca.MX.sym('alg', 4) #ca.MX.sym('alg', path_constraints_casadi(t,yy, uu, param, lower, upper).size()[0])  # Algebraic variables
 print("ALGEBRAIC VARIABLES",alg.size()[0])
+=======
+alg = ca.MX.sym('alg',1)  # Algebraic variables
+>>>>>>> main_dev_testing
 t = ca.MX.sym('t', 1)     # Time variable
 # Set up the DAE system in CasADi
 dae = {
     'x': yy,  # State variables
     #'z': alg,  # Algebraic variables (for path constraints)
+<<<<<<< HEAD
     'p': uu,  # Control inputs
     'ode':  Dynamics_with_PID_casadi(t, yy, param, uu)  # Dynamics equations
     #'alg':  Dynamics_with_PID_casadi(t, yy, param, uu)[1]#path_constraints_casadi(t,yy, uu, param, lower, upper)  # Algebraic path constraints
+=======
+    'p': ca.vertcat(t, uu),  # Control inputs
+    'ode': Dynamics_casadi(t, yy, param, uu),  # Dynamics equations
+    #'alg': con_chief_deputy_vec(yy, param) - yy[13,-1]  # Algebraic path constraints
+>>>>>>> main_dev_testing
 }
 
 # Define integration options
@@ -402,14 +448,18 @@ integrator = ca.integrator('integrator', 'idas', dae, integrator_options)
 
 # Initial conditions and control input
 yy0 = yy_o  # Initial state
+<<<<<<< HEAD
 alg0 =con_chief_deputy_angle(yy_o, param)#path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
 
+=======
+alg0 = con_chief_deputy_vec_numeric(yy_o, param)-yy_o[13]#path_constraints_numeric(teval[0] ,yy_o, np.zeros(2), param, lower, upper)  # Initial algebraic variables
+>>>>>>> main_dev_testing
 #print("Initial algebraic variables:", alg0)
 
 u0 = np.zeros(2)  # Initial control inputs
 
 # Perform the integration
-res = integrator(x0=yy0, p=u0) # , z0=alg0,
+res = integrator(x0=yy0,  p=ca.vertcat(teval[0], u0)) # , z0=alg0,
 print("Integration complete.")
 # print("Results:", res)
 
@@ -429,50 +479,129 @@ extra_output = res['out']['extra']
 print("Extra output (phi_dot):", extra_output)
 exit()
 # Reshape the results if necessary (usually solution_x will be an array of all states over time)
-solution_x = np.array(solution_x.full()).reshape((14, N_points))  # Reshape to get [states x time points]
+solution_x = np.array(solution_x.full()).reshape((16, N_points))  # Reshape to get [states x time points]
 
 
 # Assume the integrator returns solution trajectories as 'solution_x' and 'time_grid' for plotting
 # If not, adapt it based on how 'res' returns the time evolution of 'x' (state)
 time_grid = np.linspace(0, T_total, len(solution_x[0]))
 
+
+sol_y = solution_x
+teval = time_grid
+# save the numpy array
+# numpy.save('solution_x_100_30.npy', solution_x)
+# numpy.save('time_grid_100_30.npy', time_grid)
+
 # print("Final state:", final_state)
 # print("Final algebraic constraint values:", final_alg)
+<<<<<<< HEAD
 
 np.save("solution_x.npy", solution_x)
 np.save("time_grid.npy", time_grid)
 np.save("control_input.npy", u0)
 exit()
+=======
+# exit()
+>>>>>>> main_dev_testing
 ### Plotting the Results ###
 
-# Plot semi-major axis of the chief
-plt.figure()
-plt.plot(time_grid, solution_x[6, :], label='Chief semi-major axis')
-plt.xlabel('Time (s)')
-plt.ylabel('Semi-major axis')
-plt.title('Semi-major axis over time')
-plt.legend()
+print("Integration done....")
 
-# Plot yaw angles
-plt.figure()
-plt.plot(time_grid, solution_x[12, :], label='Chief yaw angle')
-plt.plot(time_grid, solution_x[13, :], label='Deputy yaw angle')
-plt.xlabel('Time (s)')
-plt.ylabel('Yaw angle')
-plt.title('Yaw angles over time')
-plt.legend()
+# Convert from NROE to Carterian co-ordinates.
+rr_s=numpy.zeros((3,len(sol_y[0])))
+vv_s=numpy.zeros((3,len(sol_y[0])))
+angle_con_array=numpy.zeros((len(sol_y[0])))
 
-print("Plotting results.")
 
-rr_s = np.zeros((3, len(time_grid)))
-angle_con_array = np.zeros((len(time_grid)))
 
-# For each time step, compute the position
-for i in range(len(solution_x[12, :])):
-    yy1 = solution_x[0:6, i]  # Deputy NSROE
-    yy2 = solution_x[6:12, i]  # Chief NSROE
-    rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
-    angle_con_array[i] = con_chief_deputy_angle(solution_x[:, i], param)
+
+for i in range(0,len(sol_y[0])):
+    # if sol_y[5][i]>2*numpy.pi:
+    #     sol_y[5][i]=
+
+    # rr_s[:,i],vv_s[:,i]=NSROE2car(numpy.array([sol_y[0][i],sol_y[1][i],sol_y[2][i],
+    #                                            sol_y[3][i],sol_y[4][i],sol_y[5][i]]),data)
+
+    yy1=sol_y[0:6,i]
+    yy2=sol_y[6:12,i]
+    # if yy2[1]>2000:
+    #     print("ANOMALY",yy2[1])
+    # print("yy1",yy1)
+    # print("yy2",yy2)
+    rr_s[:,i]=NSROE2LVLH(yy1,yy2,param)
+    angle_con=con_chief_deputy_vec_numeric(sol_y[:,i],param)
+    angle_con_array[i] = angle_con
+
+    # print("############# constains angle", angle_con)
+
+    # h = COE[0]
+    # e =COE[1]
+    # i =COE[2]
+    # OM = COE[3]
+    # om =COE[4]
+    # TA =COE[5]
+
+
+print("mean position in x",numpy.mean(rr_s[0]))
+print("mean position in y",numpy.mean(rr_s[1]))
+print("mean position in z",numpy.mean(angle_con_array))
+if np.isnan(sol_y).any():
+    print("NAN values in the solution")
+    exit()
+else:
+    print("No NAN values in the solution")
+
+# Spherical earth
+# Setting up Spherical Earth to Plot
+N = 50
+phi = numpy.linspace(0, 2 * numpy.pi, N)
+theta = numpy.linspace(0, numpy.pi, N)
+theta, phi = numpy.meshgrid(theta, phi)
+
+r_Earth = 6378.14  # Average radius of Earth [km]
+X_Earth = r_Earth * numpy.cos(phi) * numpy.sin(theta)
+Y_Earth = r_Earth * numpy.sin(phi) * numpy.sin(theta)
+Z_Earth = r_Earth * numpy.cos(theta)
+
+# draw the unit vectors of the ECI frame on the 3d plot of earth
+
+
+
+# Plotting Earth and Orbit
+fig = plt.figure(1)
+ax = plt.axes(projection='3d')
+# ax.plot_surface(X_Earth, Y_Earth, Z_Earth, color='blue', alpha=0.7)
+# x-axis
+# Add the unit vectors of the LVLH frame
+# Define a constant length for the arrows
+# Define a constant arrow length relative to the axis ranges
+# arrow_length = 0.01  # Adjust this factor to change the relative size of arrows
+# a=max(rr_s[0])
+# b=max(rr_s[1])
+# c= max(rr_s[2])
+
+# d = max([a,b,c])
+# # Normalize the vectors based on the axis scales
+# x_axis = numpy.array([arrow_length * max(rr_s[0])/d, 0, 0])
+# y_axis = numpy.array([0, arrow_length * max(rr_s[1])/d, 0])
+# z_axis = numpy.array([0, 0, arrow_length * max(rr_s[2])/d])
+# # add xlim and ylim
+# ax.set_xlim(-d, d)
+# ax.set_ylim(-d, d)
+
+# # x-axis
+# ax.quiver(0, 0, 0, x_axis[0], x_axis[1], x_axis[2], color='r', arrow_length_ratio=0.1)
+# # y-axis
+# ax.quiver(0, 0, 0, y_axis[0], y_axis[1], y_axis[2], color='g', arrow_length_ratio=0.1)
+# # z-axis
+# ax.quiver(0, 0, 0, z_axis[0], z_axis[1], z_axis[2], color='b', arrow_length_ratio=0.1)
+# ax.plot3D(rr_s[0],rr_s[1],rr_s[2] , 'black', linewidth=2, alpha=1)
+# ax.set_title('LVLH frame - Deput Spacecraft')
+# ax.set_xlabel('x')
+# ax.set_ylabel('y')
+# ax.set_zlabel('z')
+# The original rr_s array is already defined in your code as the spacecraft trajectory
 
 # Set the limits to 1 km for each axis
 x_limits = [-0.5, 1.5]  # 1 km range centered at 0
@@ -486,7 +615,7 @@ fig = plt.figure(figsize=(12, 6))
 ax1 = fig.add_subplot(121, projection='3d')
 
 # Plot the trajectory in 3D space
-line, = ax1.plot3D(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1, label='Deputy 1')
+line, = ax1.plot3D(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
 
 # Draw reference frame arrows (LVLH) on the interactive plot
 arrow_length = 0.1  # Adjust this factor to change the relative size of arrows
@@ -511,7 +640,7 @@ ax1.set_xlabel('x (km)')
 ax1.set_ylabel('y (km)')
 ax1.set_zlabel('z (km)')
 ax1.set_title('LVLH frame - Deput Spacecraft (Interactive)')
-ax1.legend(loc='best')
+
 
 # Dynamic frame plot (linked to the interactive plot)
 ax2 = fig.add_subplot(122, projection='3d')
@@ -548,8 +677,33 @@ def update_dynamic_frame(event):
 # Connect the update function to the interactive plot (ax1)
 ax1.figure.canvas.mpl_connect('motion_notify_event', update_dynamic_frame)
 
+<<<<<<< HEAD
 plt.show()
 # Show the zoomed plot
+=======
+
+# LVLH frame
+# Create a 3D plot
+fig = plt.figure(figsize=(10, 6))
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the 3D trajectory
+ax.plot(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
+
+# Plot the origin
+ax.plot([0], [0], [0], 'ro', linewidth=2, alpha=1)
+
+# Set plot labels and title
+ax.set_title('LVLH frame - Deputy Spacecraft')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+
+
+# Show the zoomed plot
+plt.show()
+
+>>>>>>> main_dev_testing
 ############# Relative orbital Dynamics ####################
 fig, axs = plt.subplots(3, 1)
 
@@ -565,6 +719,7 @@ axs[2].plot(teval, rr_s[2])
 axs[2].set_title('z')
 
 
+<<<<<<< HEAD
 # Plot semi-major axis, mean true latitude, inclination
 fig, axs = plt.subplots(3, 1)
 axs[0].plot(time_grid, solution_x[0, :], label='semi-major axis')
@@ -576,18 +731,40 @@ axs[2].set_title('Inclination')
 
 plt.tight_layout()
 
-
-# Plot q1, q2, right ascension of ascending node over time
+=======
 fig, axs = plt.subplots(3, 1)
-axs[0].plot(time_grid, solution_x[3, :], label='q1')
-axs[1].plot(time_grid, solution_x[4, :], label='q2')
-axs[2].plot(time_grid, solution_x[5, :], label='RAAN')
 
+# Plot data on the first subplot
+axs[0].plot(teval, sol_y[0])
+axs[0].set_title('semi major axis')
+
+# Plot data on the second subplot
+axs[1].plot(teval, sol_y[1])
+axs[1].set_title('mean true latitude')
+
+axs[2].plot(teval, sol_y[2])
+axs[2].set_title('inclination')
+
+>>>>>>> main_dev_testing
+
+fig, axs = plt.subplots(3, 1)
+
+# Plot data on the first subplot
+axs[0].plot(teval, sol_y[3])
 axs[0].set_title('q1')
-axs[1].set_title('q2')
-axs[2].set_title('Right Ascension of Ascending Node')
 
+# Plot data on the second subplot
+axs[1].plot(teval, sol_y[4])
+axs[1].set_title('q2')
+
+<<<<<<< HEAD
 plt.tight_layout()
+=======
+axs[2].plot(teval, sol_y[5])
+axs[2].set_title('right ascenstion of ascending node')
+
+
+>>>>>>> main_dev_testing
 
 x = rr_s[0]
 y = rr_s[1]
@@ -602,7 +779,11 @@ plt.title('Plot of x vs y')
 
 
 # Plot z and y
+<<<<<<< HEAD
 plt.figure()
+=======
+plt.figure(6)
+>>>>>>> main_dev_testing
 plt.plot(z, y, label='z vs y', color='g')
 plt.xlabel('z')
 plt.ylabel('y')
@@ -611,23 +792,61 @@ plt.title('Plot of z vs y')
 
 
 # Plot x and z
+<<<<<<< HEAD
 plt.figure()
+=======
+plt.figure(7)
+>>>>>>> main_dev_testing
 plt.plot(x, z, label='x vs z', color='r')
 plt.xlabel('x')
 plt.ylabel('z')
 plt.legend()
 plt.title('Plot of x vs z')
+<<<<<<< HEAD
+=======
 
-# Plot yaw angles and constraints angle over time
+
+
+
+>>>>>>> main_dev_testing
+
 fig, axs = plt.subplots(3, 1)
-axs[0].plot(time_grid, solution_x[12, :], label='Chief yaw angle')
+
+# Plot data on the first subplot
+axs[0].plot(teval, sol_y[12])
 axs[0].set_title('Chief yaw angle')
 
-axs[1].plot(time_grid, solution_x[13, :], label='Deputy 1 yaw angle')
+# Plot data on the second subplot
+axs[1].plot(teval, sol_y[13])
 axs[1].set_title('Deputy 1 yaw angle')
 
+<<<<<<< HEAD
 axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
 axs[2].set_title('Constraints angle')
+=======
+axs[2].plot(teval, angle_con_array)
+axs[2].set_title('Constrains angle')
+
+
+# # # After integration
+# # uu_log1 = np.array(uu_log)  # Convert to numpy array
+
+# # # Check the shape of uu_log (it should be Nx2, where N is the number of time steps)
+# # print(f"uu_log shape: {uu_log1.shape}")
+
+# # # Plotting the results for both components of uu
+# # plt.figure()
+# # plt.plot(uu_log1[:, 0], label='uu component 1')  # First column
+# # plt.plot(uu_log1[:, 1], label='uu component 2')  # Second column
+# # plt.xlabel('Time (s)')
+# # plt.ylabel('Input torque (uu)')
+# # plt.title('Evolution of uu over time')
+# # plt.legend()
+# # plt.show()
+
+>>>>>>> main_dev_testing
 plt.show()
 
-print("Plots generated.")
+
+
+

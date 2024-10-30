@@ -1,3 +1,9 @@
+# 🚧 Repository Under Construction 🚧
+
+**Note:** This repository is currently a work in progress. Some features may not be fully implemented, and there may be changes to the structure and functionality. Please use it with caution.
+
+Thank you!
+
 # Nanosat_FF_mission
 
 This repository holds the code for the project aimed at developing guidance and control for nanosatellite formation flying mission aimed at space debris characterizating using aerodynamic force. In the following sections you will more details of the project starting from description, methodology, simulation results.
@@ -13,7 +19,52 @@ In this work, we are proposing a guidance and control methodology for a novel ae
 
 ### Relative orbital dynamics with J2 pertubation in nearly non singular orbital element representation
 
-Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used[Roscoe]. With the introduction of parameters that can be used to geometrically define the formation flying [sengupta], various trajectories are shown below.
+Due to simplicity and its capabilities to represent orbits with arbitrary eccentricity, nearly non singular elements are used[Roscoe]. Specifically, we are making use of mean nearly non singular orbital elements - this choice is supported by the fact that these elements only take into account the secular effects and therefore nullifying these effects will be an important part of keeping the formation configuration bounded.
+
+Furthermore, with the introduction of parameters that can be used to geometrically define the formation flying [sengupta], we can design formation flying configurations according to our needs. 
+
+## Design Parameters for Formation Flying
+
+Based on **Sengupta and Vadali (2007)** - _"Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits"_:
+
+Here is an example of projected elliptical orbit. By using design parameters we can specify in which way our formation flying configuration should be.
+
+| Parameter               | Symbol  | Value | Description                                             |
+|-------------------------|---------|-------|---------------------------------------------------------|
+| Radial Separation       | ρ<sub>1</sub> | 0.1 m | Separation along the radial axis                       |
+| Cross-Track Separation  | ρ<sub>3</sub> | 0 m   | Separation along the cross-track axis                  |
+| Radial and Along-Track Angle | α | 0 rad | Angle between radial and along-track separation         |
+| Radial and Cross-Track Angle | β  | π/2 rad | Angle between radial and cross-track separation         |
+| Drift per Revolution    | v<sub>d</sub> | 0.000 m | Drift per orbital revolution                           |
+| Along-Track Separation  | d  | -0.1 m | Separation along the orbital track                     |
+| Adjusted Along-Track Separation | ρ<sub>2</sub> | (2 η² d) / (3 - η²) m | Based on η |
+
+### Formation Geometry
+
+<div align="center">
+    <img src="Readme_helper_files/case1.png" alt="Formation Geometry" width="60%">
+</div>
+
+### Design Parameters
+
+<div align="center">
+    <figure>
+        <img src="Readme_helper_files/yvsx.png" alt="Along track vs Radial" width="50%">
+        <figcaption style="font-size: 0.8em; color: #555;">Figure 1: Along track vs Radial</figcaption>
+    </figure>
+    <figure>
+        <img src="Readme_helper_files/yvsz.png" alt="Along track vs Cross track" width="50%">
+        <figcaption style="font-size: 0.8em; color: #555;">Figure 2: Along track vs Cross track</figcaption>
+    </figure>
+    <figure>
+        <img src="Readme_helper_files/zvsx.png" alt="Cross track vs Radial" width="50%">
+        <figcaption style="font-size: 0.8em; color: #555;">Figure 3: Cross track vs Radial</figcaption>
+    </figure>
+</div>
+
+
+
+
 
 # Repo directory structure
 ```markdown

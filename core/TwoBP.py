@@ -212,6 +212,19 @@ def NSROE2car(ROE,param):
     q2 = ROE[4]
     OM = ROE[5]
 
+    # COE_temp=MEANNSOE2OSCOE(ROE)
+    # COE = numpy.array([COE_temp[0], COE_temp[1], COE_temp[2], COE_temp[3], COE_temp[4], COE_temp[6]])
+    # # print("mean ",a,l,i,q1,q2,OM)
+
+    # a = COE[0]
+    # M=theta2M(COE[5],COE[1])
+    # l = M+COE[4]
+    # i = COE[2]
+    # q1 = COE[1]*numpy.sin(COE[4])
+    # q2 = COE[1]*numpy.cos(COE[4])
+    # OM = COE[3]
+
+
 
 
     e=numpy.sqrt(q1**2 + q2**2)
@@ -230,6 +243,8 @@ def NSROE2car(ROE,param):
         mean_anamoly = l - omega_peri
         theta_tuple = M2theta(mean_anamoly, e, 1e-8)
         theta = theta_tuple[0]
+        if theta>2*numpy.pi:
+            theta=theta-2*numpy.pi
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
     
@@ -287,7 +302,7 @@ def OE_Timetotheta(COE,T,mu):
 
 def M2theta(M,e,tol):
 
-    if numpy.isnan(e):
+    if numpy.isnan(e) or numpy.isnan(M):
         print("Eccentricity is not defined")
     if M < numpy.pi :
         E0=M + (e/2)
@@ -554,7 +569,7 @@ def guess_nonsingular(t,yy,param):
     
     return y_dot
 
-def guess_nonsingular_Bmat(t,yy,param):
+def guess_nonsingular_Bmat(t,yy,param,yaw):
    # Guass planetary equations
     # Input, 
     # t - time
@@ -740,15 +755,15 @@ def lagrage_J2_diff(t,yy,data):
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-
+    epsilon = 0*J2 * (Re / p)**2 * n
 
     # Compute each component
     component_1 = 0
-    component_2 = n + ((3/4) * J2 * (Re / p)**2 * n) * (eta * (3 * numpy.cos(i)**2 - 1) + (5 * numpy.cos(i)**2 - 1))
+    component_2 = n + ((3/4) * epsilon) * (eta * (3 * numpy.cos(i)**2 - 1) + (5 * numpy.cos(i)**2 - 1))
     component_3 = 0
-    component_4 = - (3/4) * J2 * (Re / p)**2 * n * (3 * numpy.cos(i)**2 - 1) * q2
-    component_5 = (3/4) * J2 * (Re / p)**2 * n * (3 * numpy.cos(i)**2 - 1) * q1
-    component_6 = - (3/2) * J2 * (Re / p)**2 * n * numpy.cos(i)
+    component_4 = - (3/4) * epsilon * (3 * numpy.cos(i)**2 - 1) * q2
+    component_5 = (3/4) * epsilon * (3 * numpy.cos(i)**2 - 1) * q1
+    component_6 = - (3/2) * epsilon * numpy.cos(i)
     
     # Combine components into a vector
     f_dot = numpy.array([component_1, component_2, component_3, component_4, component_5, component_6])
@@ -810,7 +825,7 @@ def Lagrange_deri(t,yy,param):
         
     # rr,vv=kep2car(numpy.array([h,yy[1],yy[2],yy[3],yy[4],yy[5]]),mu)
 
-    epsilon =  data["J"][0] * ((data["Primary"][1] / p)**2) * n
+    epsilon =  0*data["J"][0] * ((data["Primary"][1] / p)**2) * n
 
 
     # perturbations
@@ -1038,48 +1053,109 @@ def Cart2RO(RO,OE_1):
 
 
 # converts the design parameters to relative orbital elements
+import numpy as np
 
-
-def Param2NROE(NOE, parameters,data):
-
+def Param2NROE(NOE, parameters, data):
     # Convert from design parameters to relative orbital elements
-    # Taken from  C.traub paper 
+    # Taken from C.traub paper 
     # NOE=numpy.array([a,lambda_0,i,q1,q2,omega]) unpack this
     a, lambda_, i, q1, q2, omega = NOE
     
     # Unpacking the parameters
-    rho_1, rho_2, rho_3, alpha_0, beta_0,v_d = parameters
+    rho_1, rho_2, rho_3, alpha_0, beta_0, v_d = parameters
     
-    mu=data["Primary"][0]
+    mu = data["Primary"][0]
 
-    eta = numpy.sqrt(1 - q1**2 - q2**2)
+    print("Initial NOE:", NOE)
+    print("Parameters:", parameters)
+    print("Gravitational parameter (mu):", mu)
 
-    n = numpy.sqrt(mu / a**3)
+    eta = np.sqrt(1 - q1**2 - q2**2)
+    print("Eta:", eta)
 
-    e=numpy.sqrt(q1**2 + q2**2)
-    h=numpy.sqrt(mu*a*(1-e**2))
-    term1=(h**2)/(mu)
-    p=term1
+    n = np.sqrt(mu / a**3)
+    print("Mean motion (n):", n)
+
+    e = np.sqrt(q1**2 + q2**2)
+    print("Eccentricity (e):", e)
+
+    h = np.sqrt(mu * a * (1 - e**2))
+    print("Specific angular momentum (h):", h)
+
+    term1 = (h**2) / mu
+    p = term1
+    print("Semi-latus rectum (p):", p)
 
     delta_a = (-2 * eta * v_d) / (3 * n)
+    print("Delta a:", delta_a)
     
     # Equation 16 (uses 'omega' from orbital elements)
-    delta_Omega = (-rho_3 * numpy.sin(beta_0)) / (p * numpy.sin(i))
+    delta_Omega = (-rho_3 * np.sin(beta_0)) / (p * np.sin(i))
+    print("Delta Omega:", delta_Omega)
     
     # Equation 12 (uses 'lambda_' from orbital elements)
-    delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
+    delta_lambda = (rho_2 / p) - delta_Omega * np.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * np.cos(alpha_0) - q2 * np.sin(alpha_0))
+    print("Delta lambda:", delta_lambda)
     
     # Equation 13
-    delta_i = (rho_3 / p) * numpy.cos(beta_0)
+    delta_i = (rho_3 / p) * np.cos(beta_0)
+    print("Delta i:", delta_i)
     
     # Equation 14
-    delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q1 = -(1 - q1**2) * (rho_1 / p) * np.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * np.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * np.cos(i))
+    print("Delta q1:", delta_q1)
     
     # Equation 15
-    delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    delta_q2 = -(1 - q2**2) * (rho_1 / p) * np.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * np.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * np.cos(i))
+    print("Delta q2:", delta_q2)
     
     # Return as vector
-    return numpy.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
+    result = np.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
+    print("Resulting NROE:", result)
+    return result
+
+# def Param2NROE(NOE, parameters,data):
+
+#     # Convert from design parameters to relative orbital elements
+#     # Taken from  C.traub paper 
+#     # NOE=numpy.array([a,lambda_0,i,q1,q2,omega]) unpack this
+#     a, lambda_, i, q1, q2, omega = NOE
+    
+#     # Unpacking the parameters
+#     rho_1, rho_2, rho_3, alpha_0, beta_0,v_d = parameters
+    
+#     mu=data["Primary"][0]
+
+#     eta = numpy.sqrt(1 - q1**2 - q2**2)
+
+#     n = numpy.sqrt(mu / a**3)
+
+#     e=numpy.sqrt(q1**2 + q2**2)
+#     h=numpy.sqrt(mu*a*(1-e**2))
+#     term1=(h**2)/(mu)
+#     p=term1
+
+    
+
+#     delta_a = (-2 * eta * v_d) / (3 * n)
+    
+#     # Equation 16 (uses 'omega' from orbital elements)
+#     delta_Omega = (-rho_3 * numpy.sin(beta_0)) / (p * numpy.sin(i))
+    
+#     # Equation 12 (uses 'lambda_' from orbital elements)
+#     delta_lambda = (rho_2 / p) - delta_Omega * numpy.cos(i) - (((1 + eta + eta**2) / (1 + eta)) * (rho_1 / p)) * (q1 * numpy.cos(alpha_0) - q2 * numpy.sin(alpha_0))
+    
+#     # Equation 13
+#     delta_i = (rho_3 / p) * numpy.cos(beta_0)
+    
+#     # Equation 14
+#     delta_q1 = -(1 - q1**2) * (rho_1 / p) * numpy.sin(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.cos(alpha_0)) - q2 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    
+#     # Equation 15
+#     delta_q2 = -(1 - q2**2) * (rho_1 / p) * numpy.cos(alpha_0) + (q1 * q2 * (rho_1 / p) * numpy.sin(alpha_0)) + q1 * (rho_2 / p - delta_Omega * numpy.cos(i))
+    
+#     # Return as vector
+#     return numpy.array([delta_a, delta_lambda, delta_i, delta_q1, delta_q2, delta_Omega])
 
 
 
@@ -1188,6 +1264,53 @@ def NSROE2Cart(NSROE,NSROE0,x_vec_init,data):
     return numpy.array([x_theta_val, y_theta_val, z_theta_val])
 
 
+def NSOE2COE(NSOE0,data):
+
+    # conversion from from relative orbital elements to LVLH frame
+
+    # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
+    data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
+    mu=data["Primary"][0]
+    Re=data["Primary"][1]
+    y_dot=numpy.zeros((6,))
+    J2 =  data["J"][0]
+
+
+
+    # assigning the state variables
+    a = NSOE0[0]
+    l = NSOE0[1]
+    i = NSOE0[2]
+    q1 = NSOE0[3]
+    q2 = NSOE0[4]
+    OM = NSOE0[5]
+
+
+    e=numpy.sqrt(q1**2 + q2**2)
+    h=numpy.sqrt(mu*a*(1-e**2))
+    term1=(h**2)/(mu)
+    eta =  numpy.sqrt(1 - q1**2 - q2**2)
+    p=term1
+    rp=a*(1-e)
+    n = numpy.sqrt(mu/(a**3))
+
+    if e==0:  
+        u = l
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+    else:
+        omega_peri = numpy.arccos(q1 / e)
+        mean_anamoly = l - omega_peri
+        theta_tuple = M2theta(mean_anamoly, e, 1e-8)
+        theta = theta_tuple[0]
+        u = theta + omega_peri
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+
+    COE_extended = numpy.array([a,e,i,OM,omega_peri,theta,mean_anamoly])
+
+    return COE_extended
+
+    
+
 
 def NSROE2LVLH(NSROE,NSOE0,data):
 
@@ -1209,7 +1332,20 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     q1 = NSOE0[3]
     q2 = NSOE0[4]
     OM = NSOE0[5]
+    
 
+    # # COE_temp=MEANNSOE2OSCOE(NSOE0)
+    # # COE = numpy.array([COE_temp[0], COE_temp[1], COE_temp[2], COE_temp[3], COE_temp[4], COE_temp[6]])
+    # # print("mean ",a,l,i,q1,q2,OM)
+
+    # # a = COE[0]
+    # # M=theta2M(COE[5],COE[1])
+    # # l = M+COE[4]
+    # # i = COE[2]
+    # # q1 = COE[1]*numpy.sin(COE[4])
+    # # q2 = COE[1]*numpy.cos(COE[4])
+    # # OM = COE[3]
+    # # print('OSC',a,l,i,q1,q2,OM)
 
 
     delta_a = NSROE[0]
@@ -1254,12 +1390,12 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     test_4 = (delta_q1**2 + delta_q2**2)
     test_5 = (q1 * delta_q1 + q2 * delta_q2)**2
     test_6 = (test_2 + test_3 + test_4 - test_5)
-    print("test_1",test_1)
-    print("test_2",test_2)
-    print("test_3",test_3)
-    print("test_4",test_4)
-    print("test_5",test_5)
-    print("test_6",test_6)
+    # print("test_1",test_1)
+    # print("test_2",test_2)
+    # print("test_3",test_3)
+    # print("test_4",test_4)
+    # print("test_5",test_5)
+    # print("test_6",test_6)
     
 
     e2 = p * (delta_Omega * numpy.cos(i) + ( (1 + eta + eta**2) / (eta**3 * (1 + eta)) ) * (q2 * delta_q1 - q1 * delta_q2) 
@@ -1268,9 +1404,9 @@ def NSROE2LVLH(NSROE,NSOE0,data):
 
     e3 =   p * ((delta_i**2) + (delta_Omega**2) * (numpy.sin(i)**2))**0.5
 
-    print("e1",e1)
-    print("e2",e2)
-    print("e3",e3)
+    # print("e1",e1)
+    # print("e2",e2)
+    # print("e3",e3)
 
     alpha_numerator = (1 + eta) * (delta_q1 + q2 * delta_lambda0) - q1 * (q1 * delta_q1 + q2 * delta_q2)
     
@@ -1384,10 +1520,10 @@ def NSROE2LVLH_2(NSROE, NSOE0, data):
     delta_u = deputy_params[4] - chief_params[4]
     e, h, p, rp, u, r = chief_params
     # print("chief_params: ", chief_params)
-    print("delta_u: ", delta_u)
-    print("delta_lambda0: ", delta_lambda0)
-    print("delta_i: ", delta_i)
-    print("delta_a: ", delta_a)
+    # print("delta_u: ", delta_u)
+    # print("delta_lambda0: ", delta_lambda0)
+    # print("delta_i: ", delta_i)
+    # print("delta_a: ", delta_a)
     # e = numpy.sqrt(q1**2 + q2**2)
     # h = numpy.sqrt(mu * a * (1 - e**2))
     # p = h**2 / mu
@@ -1417,12 +1553,12 @@ def NSROE2LVLH_2(NSROE, NSOE0, data):
     # y component
     y = r * (delta_u + (numpy.cos(i) * delta_Omega))
 
-    if y > 2:
-        print("y: ", y)
-        print("delta_u: ", delta_u)
-        print("delta_Omega: ", delta_Omega)
-        print("i: ", i)
-        print("delta_i: ", delta_i)    
+    # if y > 2:
+    #     print("y: ", y)
+    #     print("delta_u: ", delta_u)
+    #     print("delta_Omega: ", delta_Omega)
+    #     print("i: ", i)
+    #     print("delta_i: ", delta_i)    
     # z component
     z = r * (numpy.sin(u) * delta_i - numpy.cos(u) * numpy.sin(i) * delta_Omega)
 
@@ -1479,3 +1615,263 @@ def frenet_to_lvlh(F_T, F_N, F_B, gamma):
     return F_R_lvlh, F_T_lvlh, F_N_lvlh
 
 
+
+
+def NSOE2COE(NSOE0):
+
+    # conversion from from relative orbital elements to LVLH frame
+
+    # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
+    data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
+    mu=data["Primary"][0]
+    Re=data["Primary"][1]
+    y_dot=numpy.zeros((6,))
+    J2 =  data["J"][0]
+
+
+
+    # assigning the state variables
+    a = NSOE0[0]
+    l = NSOE0[1]
+    i = NSOE0[2]
+    q1 = NSOE0[3]
+    q2 = NSOE0[4]
+    OM = NSOE0[5]
+
+
+    e=numpy.sqrt(q1**2 + q2**2)
+    h=numpy.sqrt(mu*a*(1-e**2))
+    term1=(h**2)/(mu)
+    eta =  numpy.sqrt(1 - q1**2 - q2**2)
+    p=term1
+    rp=a*(1-e)
+    n = numpy.sqrt(mu/(a**3))
+
+    if e==0:  
+        u = l
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+    else:
+        omega_peri = numpy.arccos(q1 / e)
+        mean_anamoly = l - omega_peri
+        theta_tuple = M2theta(mean_anamoly, e, 1e-8)
+        theta = theta_tuple[0]
+        E = 2*numpy.arctan(numpy.tan(theta/2)*numpy.sqrt((1-e)/(1+e)))
+        u = theta + omega_peri
+        r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
+
+    COE_extended = numpy.array([a,e,i,OM,omega_peri,theta,mean_anamoly,E,r,h])
+
+    return COE_extended
+
+
+def MEANNSOE2OSCOE(NSOE):
+
+    a,e,i,OM,omega,f,M,E,r,h = NSOE2COE(NSOE)
+
+
+    # Constants and parameters
+    J2 = 1.082626925638815e-3  # J2 coefficient for Earth
+    re = 6378.1363  # Earth's equatorial radius [km]
+    # a = 7000.0  # Semi-major axis [km]
+    # e = 0.001  # Eccentricity
+    # i = np.radians(63.4)  # Inclination in radians
+    # omega = np.radians(30)  # Argument of perigee in radians
+    # f = np.radians(10)  # True anomaly in radians (example value)
+    # M = np.radians(5)  # Mean anomaly (example value)
+    # E = np.radians(10)  # Eccentric anomaly in radians (example value)
+    # r = 6950.0  # Current orbit radius [km] (example value)
+
+
+
+    # Auxiliary parameters
+    eta = np.sqrt(1 - e ** 2)  # eta parameter
+    # mean to osculating gamma_2 parameter
+    gamma2 = (J2 / 2) * (re / a)**2  # gamma_2 parameter
+    gamma2_prime = gamma2 / eta**4  # gamma_2' parameter
+
+    # Equation F.4: Mean anomaly M from eccentric anomaly E using Kepler's equation
+    M_kepler = E - e * np.sin(E)
+
+    # Equation F.5: True anomaly f
+    f_true = 2 * np.tan(np.sqrt((1 + e) / (1 - e)) * np.tan(E / 2))
+
+    # Equation F.6: Ratio a/r
+    a_r_ratio = (1 + e * np.cos(f_true)) / eta**2
+
+    # Equation for transformed semi-major axis (additional formula provided)
+    a_prime = a + a * gamma2 * ((3 * np.cos(i)**2 - 1) * ((a**3 / r**3) - (1 / eta**3)) + 3 * (1 - np.cos(i)**2) * (a**3 / r**3) * np.cos(2 * omega + 2 * f))
+
+    # Equation F.8: delta_e1
+    delta_e1 = (gamma2_prime / 8) * e * eta**2 * (1 - 11 * np.cos(i)**2 - 40 * (np.cos(i)**4) / (1 - 5 * np.cos(i)**2)) * np.cos(2 * omega)
+
+    # Equation for delta_e (combined version of terms)
+    delta_e = delta_e1 + (eta**2 / 2) * (
+        gamma2* (
+            (3 * np.cos(i)**2 - 1) / eta**6 * (e * eta + (e / (1 + eta)) + 3 * np.cos(f) + 3 * e * np.cos(f)**2 + e**2 * np.cos(f)**3) +
+            3 * (1 - np.cos(i)**2) / eta**6 * (e + 3 * np.cos(f) + 3 * e * np.cos(f)**2 + e**2 * np.cos(f)**3) * np.cos(2 * omega + 2 * f)
+        ) - gamma2_prime * (1 - np.cos(i)**2) * (3 * np.cos(2 * omega + f) + np.cos(2 * omega + 3 * f))
+    )
+
+    # Equation F.10: delta_i
+    term1_i = - (e * delta_e1) / (eta**2 * np.tan(i))
+    term_2_i = (gamma2_prime / 2) * np.cos(i) * np.sqrt(1 - (np.cos(i)**2)* (3 * np.cos(2 * omega + 2 * f) + 3 * e * np.cos(2 * omega + f) + e * np.cos(2 * omega + 3 * f)))
+    delta_i = term1_i + term_2_i
+
+    # Equation F.11: delta_M_omega_Omega (expanded terms)
+    term1 = (gamma2_prime / 8) * eta**3 * (1 - 11 * np.cos(i)**2 - 40 * ( (np.cos(i)**4) / (1 - 5 * np.cos(i)**2)))
+    term2 = (2 + e**2 - 11 * (2 + 3 * e**2) * np.cos(i)**2)
+    term3 = - 40 * (2 + 5 * e**2) * ((np.cos(i)**4) / (1 - 5 * np.cos(i)**2))
+    term4 = - 400 * e**2 * (np.cos(i)**6) / ((1 - 5 * np.cos(i)**2)**2)
+    term5 = (gamma2_prime / 4) * (-6 * (1 - 5 * np.cos(i)**2) * (f - M + e * np.sin(f)) + (3 - 5 * np.cos(i)**2) * (3 * np.sin(2 * omega + 2 * f) + 3 * e * np.sin(2 * omega + f) + e * np.sin(2 * omega + 3 * f)))
+
+    # Corrected term6 with the subtraction of the additional factor
+    term6 = - (gamma2_prime / 8) * e**2 * np.cos(i) * (11 + 80 * ((np.cos(i)**2) / (1 - 5 * np.cos(i)**2)) + 200 * ((np.cos(i)**4) / ((1 - 5 * np.cos(i)**2)**2))) 
+    term7 = 6* ( f - M + e * np.sin(f)) - 3 * np.sin(2 * omega + 2 * f) - 3 * e * np.sin(2 * omega + f) - e * np.sin(2 * omega + 3 * f)
+
+
+    M_omega_Omega = M + omega + OM + term1  - (gamma2_prime / 16) * ( term2 + term3 + term4 ) + term5 + term6 - (gamma2_prime/ 2) * np.cos(i) * term7
+
+    # Equation F.12: e_delta_M
+    term1 = (gamma2_prime / 8) * e * eta**3 * (1 - 11 * np.cos(i)**2 - 40 * ((np.cos(i)**4) / (1 - 5 * np.cos(i)**2)))
+    subterm1 = 2 * (3 * np.cos(i)**2 - 1) * ((a * eta / r)**2 + (a / r) + 1) * np.sin(f)
+    subterm2 = 3 * (1 - np.cos(i)**2) * ((-(a * eta / r)**2 - (a / r) + 1) * np.sin(2 * omega + f))
+    subterm3 = ((a * eta / r)**2 + (a / r) + (1 / 3)) * np.sin(2 * omega + 3 * f)
+    term2 = (gamma2_prime / 4) * eta**3 * (subterm1 + subterm2 + subterm3)
+    e_delta_M = term1 - term2
+
+    # Equation F.13: delta_Omega
+    term1_Omega = - (gamma2_prime / 8) * e**2 * np.cos(i) * (11 + 80 * ((np.cos(i)**2) / (1 - 5 * np.cos(i)**2)) + 200 * ((np.cos(i)**4) / ((1 - 5 * np.cos(i)**2)**2)))
+    subterm1 = 6 * (f - M + e * np.sin(f))
+    subterm2 = -3 * np.sin(2 * omega + 2 * f)
+    subterm3 = -3 * e * np.sin(2 * omega + f)
+    subterm4 = -e * np.sin(2 * omega + 3 * f)
+    term2_Omega = - (gamma2_prime / 2) * np.cos(i) * (subterm1 + subterm2 + subterm3 + subterm4)
+    delta_Omega = term1_Omega + term2_Omega
+
+    # Equation F.14 and F.15: d1 and d2
+    d1 = (e + delta_e) * np.sin(M) + e_delta_M * np.cos(M)
+    d2 = (e + delta_e) * np.cos(M) - e_delta_M * np.sin(M)
+
+    # Equation F.16 to F.22
+    M_prime = np.arctan2(d1 ,d2)
+    e_prime = np.sqrt(d1**2 + d2**2)
+    d3 = (np.sin(i / 2) + np.cos(i / 2) * (delta_i / 2)) * np.sin(OM) + np.sin(i / 2) * delta_Omega * np.cos(OM)
+    d4 = (np.sin(i / 2) + np.cos(i / 2) * (delta_i / 2)) * np.cos(OM) - np.sin(i / 2) * delta_Omega * np.sin(OM)
+    Omega_prime = np.arctan2(d3 , d4)
+    i_prime = 2 * np.arcsin(np.sqrt(d3**2 + d4**2))
+    omega_prime = (M_omega_Omega) - M_prime - Omega_prime
+
+    theta_tuple = M2theta(M_prime, e_prime, 1e-8)
+    theta = theta_tuple[0]
+    E = 2*numpy.arctan(numpy.tan(theta/2)*numpy.sqrt((1-e)/(1+e)))
+
+
+    # h=numpy.sqrt(mu*a*(1-e**2))
+    COE_osculating = np.array([a_prime, e_prime, i_prime, Omega_prime, omega_prime, M_prime,theta,E])
+    # [a,e,i,Omega,omega,M]
+    
+    return COE_osculating
+
+def OSNSOE2MEANCOE(NSOE):
+
+    a,e,i,OM,omega,f,M,E,r,h = NSOE2COE(NSOE)
+
+
+    # Constants and parameters
+    J2 = 1.082626925638815e-3  # J2 coefficient for Earth
+    re = 6378.1363  # Earth's equatorial radius [km]
+    # a = 7000.0  # Semi-major axis [km]
+    # e = 0.001  # Eccentricity
+    # i = np.radians(63.4)  # Inclination in radians
+    # omega = np.radians(30)  # Argument of perigee in radians
+    # f = np.radians(10)  # True anomaly in radians (example value)
+    # M = np.radians(5)  # Mean anomaly (example value)
+    # E = np.radians(10)  # Eccentric anomaly in radians (example value)
+    # r = 6950.0  # Current orbit radius [km] (example value)
+
+
+
+    # Auxiliary parameters
+    eta = np.sqrt(1 - e ** 2)  # eta parameter
+    # mean to osculating gamma_2 parameter
+    gamma2 = - (J2 / 2) * (re / a)**2  # gamma_2 parameter
+    gamma2_prime = gamma2 / eta**4  # gamma_2' parameter
+
+    # Equation F.4: Mean anomaly M from eccentric anomaly E using Kepler's equation
+    M_kepler = E - e * np.sin(E)
+
+    # Equation F.5: True anomaly f
+    f_true = 2 * np.tan(np.sqrt((1 + e) / (1 - e)) * np.tan(E / 2))
+
+    # Equation F.6: Ratio a/r
+    a_r_ratio = (1 + e * np.cos(f_true)) / eta**2
+
+    # Equation for transformed semi-major axis (additional formula provided)
+    a_prime = a + a * gamma2 * ((3 * np.cos(i)**2 - 1) * ((a**3 / r**3) - (1 / eta**3)) + 3 * (1 - np.cos(i)**2) * (a**3 / r**3) * np.cos(2 * omega + 2 * f))
+
+    # Equation F.8: delta_e1
+    delta_e1 = (gamma2_prime / 8) * e * eta**2 * (1 - 11 * np.cos(i)**2 - 40 * (np.cos(i)**4) / (1 - 5 * np.cos(i)**2)) * np.cos(2 * omega)
+
+    # Equation for delta_e (combined version of terms)
+    delta_e = delta_e1 + (eta**2 / 2) * (
+        gamma2* (
+            (3 * np.cos(i)**2 - 1) / eta**6 * (e * eta + (e / (1 + eta)) + 3 * np.cos(f) + 3 * e * np.cos(f)**2 + e**2 * np.cos(f)**3) +
+            3 * (1 - np.cos(i)**2) / eta**6 * (e + 3 * np.cos(f) + 3 * e * np.cos(f)**2 + e**2 * np.cos(f)**3) * np.cos(2 * omega + 2 * f)
+        ) - gamma2_prime * (1 - np.cos(i)**2) * (3 * np.cos(2 * omega + f) + np.cos(2 * omega + 3 * f))
+    )
+
+    # Equation F.10: delta_i
+    term1_i = - (e * delta_e1) / (eta**2 * np.tan(i))
+    term_2_i = (gamma2_prime / 2) * np.cos(i) * np.sqrt(1 - (np.cos(i)**2)* (3 * np.cos(2 * omega + 2 * f) + 3 * e * np.cos(2 * omega + f) + e * np.cos(2 * omega + 3 * f)))
+    delta_i = term1_i + term_2_i
+
+    # Equation F.11: delta_M_omega_Omega (expanded terms)
+    term1 = (gamma2_prime / 8) * eta**3 * (1 - 11 * np.cos(i)**2 - 40 * ( (np.cos(i)**4) / (1 - 5 * np.cos(i)**2)))
+    term2 = (2 + e**2 - 11 * (2 + 3 * e**2) * np.cos(i)**2)
+    term3 = - 40 * (2 + 5 * e**2) * ((np.cos(i)**4) / (1 - 5 * np.cos(i)**2))
+    term4 = - 400 * e**2 * (np.cos(i)**6) / ((1 - 5 * np.cos(i)**2)**2)
+    term5 = (gamma2_prime / 4) * (-6 * (1 - 5 * np.cos(i)**2) * (f - M + e * np.sin(f)) + (3 - 5 * np.cos(i)**2) * (3 * np.sin(2 * omega + 2 * f) + 3 * e * np.sin(2 * omega + f) + e * np.sin(2 * omega + 3 * f)))
+
+    # Corrected term6 with the subtraction of the additional factor
+    term6 = - (gamma2_prime / 8) * e**2 * np.cos(i) * (11 + 80 * ((np.cos(i)**2) / (1 - 5 * np.cos(i)**2)) + 200 * ((np.cos(i)**4) / ((1 - 5 * np.cos(i)**2)**2))) 
+    term7 = 6* ( f - M + e * np.sin(f)) - 3 * np.sin(2 * omega + 2 * f) - 3 * e * np.sin(2 * omega + f) - e * np.sin(2 * omega + 3 * f)
+
+
+    M_omega_Omega = M + omega + OM + term1  - (gamma2_prime / 16) * ( term2 + term3 + term4 ) + term5 + term6 - (gamma2_prime/ 2) * np.cos(i) * term7
+
+    # Equation F.12: e_delta_M
+    term1 = (gamma2_prime / 8) * e * eta**3 * (1 - 11 * np.cos(i)**2 - 40 * ((np.cos(i)**4) / (1 - 5 * np.cos(i)**2)))
+    subterm1 = 2 * (3 * np.cos(i)**2 - 1) * ((a * eta / r)**2 + (a / r) + 1) * np.sin(f)
+    subterm2 = 3 * (1 - np.cos(i)**2) * ((-(a * eta / r)**2 - (a / r) + 1) * np.sin(2 * omega + f))
+    subterm3 = ((a * eta / r)**2 + (a / r) + (1 / 3)) * np.sin(2 * omega + 3 * f)
+    term2 = (gamma2_prime / 4) * eta**3 * (subterm1 + subterm2 + subterm3)
+    e_delta_M = term1 - term2
+
+    # Equation F.13: delta_Omega
+    term1_Omega = - (gamma2_prime / 8) * e**2 * np.cos(i) * (11 + 80 * ((np.cos(i)**2) / (1 - 5 * np.cos(i)**2)) + 200 * ((np.cos(i)**4) / ((1 - 5 * np.cos(i)**2)**2)))
+    subterm1 = 6 * (f - M + e * np.sin(f))
+    subterm2 = -3 * np.sin(2 * omega + 2 * f)
+    subterm3 = -3 * e * np.sin(2 * omega + f)
+    subterm4 = -e * np.sin(2 * omega + 3 * f)
+    term2_Omega = - (gamma2_prime / 2) * np.cos(i) * (subterm1 + subterm2 + subterm3 + subterm4)
+    delta_Omega = term1_Omega + term2_Omega
+
+    # Equation F.14 and F.15: d1 and d2
+    d1 = (e + delta_e) * np.sin(M) + e_delta_M * np.cos(M)
+    d2 = (e + delta_e) * np.cos(M) - e_delta_M * np.sin(M)
+
+    # Equation F.16 to F.22
+    M_prime = np.arctan2(d1 ,d2)
+    e_prime = np.sqrt(d1**2 + d2**2)
+    d3 = (np.sin(i / 2) + np.cos(i / 2) * (delta_i / 2)) * np.sin(OM) + np.sin(i / 2) * delta_Omega * np.cos(OM)
+    d4 = (np.sin(i / 2) + np.cos(i / 2) * (delta_i / 2)) * np.cos(OM) - np.sin(i / 2) * delta_Omega * np.sin(OM)
+    Omega_prime = np.arctan2(d3 , d4)
+    i_prime = 2 * np.arcsin(np.sqrt(d3**2 + d4**2))
+    omega_prime = (M_omega_Omega) - M_prime - Omega_prime
+
+
+    # h=numpy.sqrt(mu*a*(1-e**2))
+    COE_osculating = np.array([a_prime, e_prime, i_prime, Omega_prime, omega_prime, M_prime])
+    # [a,e,i,Omega,omega,M]
+    
+    return COE_osculating
