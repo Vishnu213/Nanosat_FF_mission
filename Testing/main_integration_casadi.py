@@ -342,19 +342,11 @@ print("CHIEF INITIAL ORBITAL ELEMENTS", NOE_chief)
 yy_o = numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d, PID_state))
 
 # TIME #################################################
-<<<<<<< HEAD
-N_points = 1000
-mu = param["Primary"][0]
-Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
-n_revol_T = 0.00005 * 365 * 24 * 60 * 60 / Torb
-n_revolution = n_revol_T
-=======
 N_points = 10000
 mu = param["Primary"][0]
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution = 500# n_revol_T
->>>>>>> main_dev_testing
+n_revolution = 10000# n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]

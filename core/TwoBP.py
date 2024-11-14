@@ -755,7 +755,7 @@ def lagrage_J2_diff(t,yy,data):
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-    epsilon = 0*J2 * (Re / p)**2 * n
+    epsilon = 1*J2 * (Re / p)**2 * n
 
     # Compute each component
     component_1 = 0
@@ -825,7 +825,7 @@ def Lagrange_deri(t,yy,param):
         
     # rr,vv=kep2car(numpy.array([h,yy[1],yy[2],yy[3],yy[4],yy[5]]),mu)
 
-    epsilon =  0*data["J"][0] * ((data["Primary"][1] / p)**2) * n
+    epsilon =  1*data["J"][0] * ((data["Primary"][1] / p)**2) * n
 
 
     # perturbations

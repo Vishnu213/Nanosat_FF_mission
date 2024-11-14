@@ -138,13 +138,15 @@ else:
 
 # Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-rho_1 = 0.1 # [m]  - radial separation
+rho_1 = 0.5 # [m]  - radial separation
 rho_3 =0 # [m]  - cross-track separation
 alpha = 0#180 * deg2rad  # [rad] - angle between the radial and along-track separation
 beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0.000 #-10 # Drift per revolutions m/resolution
 d= -0.1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
+rho_2 = (e*(3+2*eta**2) * d) /(3-eta**2)*rho_1 * np.cos(alpha) # [m]  - along-track separation for bounded symmnetic deputy motion in along track direction
+
 print("RHO_2",rho_2)
 print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
 parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
@@ -156,7 +158,7 @@ RNOE_0[0]=0
 RNOE_0[2]=-RNOE_0[5]*numpy.cos(NOE_chief[2])
 
 # angle of attack for the deputy spacecraft
-yaw_1 = 90*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
+yaw_1 = 0*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
 yaw_2 = 0*deg2rad  # [rad] - angle of attack = 0
 # 12 -> chief yaw angle
 # 13 -> deputy yaw angle
@@ -178,14 +180,14 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 # test for gauess equation
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
-n_revol_T = 0.0005*365*24*60*60/Torb
-n_revolution=  10 #n_revol_T
+n_revol_T = 365*24*60*60/Torb
+n_revolution=  100 # n_revol_T #n_revol_T
 T_total=n_revolution*Torb
-print("Orbital period",Torb)
+print("Orbital period",Torb, "Number of orbits",n_revol_T)
 
 
 t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 100000)
+teval=numpy.linspace(0, T_total, 10000)
 # K=numpy.array([k1,k2])
 
 data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
@@ -253,7 +255,7 @@ vv_s=numpy.zeros((3,len(sol_y[0])))
 angle_con_array=numpy.zeros((len(sol_y[0])))
 
 
-
+mid_index = len(teval) // 2
 
 for i in range(0,len(sol_y[0])):
     # if sol_y[5][i]>2*numpy.pi:
@@ -425,6 +427,12 @@ ax = fig.add_subplot(111, projection='3d')
 # Plot the 3D trajectory
 ax.plot(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
 
+
+# Plot the initial, midpoint, and final points
+ax.plot(rr_s[0, 0], rr_s[1, 0], rr_s[2, 0], 'ko', linewidth=2, alpha=1, label='Start Point')  # Starting point
+ax.plot(rr_s[0, mid_index], rr_s[1, mid_index], rr_s[2, mid_index], 'ro', markersize=8, label='Midpoint')  # Midpoint
+ax.plot(rr_s[0, -1], rr_s[1, -1], rr_s[2, -1], 'bo', linewidth=2, alpha=1, label='End Point')  # End point
+
 # Plot the origin
 ax.plot([0], [0], [0], 'ro', linewidth=2, alpha=1)
 
@@ -433,6 +441,7 @@ ax.set_title('LVLH frame - Deputy Spacecraft')
 ax.set_xlabel('Radial (m)')
 ax.set_ylabel('Along track (m)')
 ax.set_zlabel('Cross track (m)')
+ax.legend()
 
 
 # Show the zoomed plot

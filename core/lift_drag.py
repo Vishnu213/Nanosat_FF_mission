@@ -1,11 +1,25 @@
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
+import json
 # from pyatmos import expo
 from scipy.special import erf
 from CL_CD_modified_sentman import  calculate_cd_cl
 from TwoBP import car2NNSOE, car2NNSOE_density
 from Density_model import model_density, scaler, target_scaler, density_get
 from Transformations import C1, Frenet2LVLH
+from projected_area import lookup_table_surface_properties
+
+
+
+# Load the JSON lookup table
+def load_lookup_table(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+# Example usage after loading
+lookup_table_path = 'C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nano_sat_casadi\\Nanosat_FF_mission\\helper_files\\lookup_table_projected_area.json'
+loaded_lookup_table = load_lookup_table(lookup_table_path)
 
 
 km2m = 1e3  # Conversion factor from kilometers to meters
@@ -38,39 +52,6 @@ def lookup_surface_properties(angle, poly_coeffs):
     # print("##############")
     # print("surfaces_data",surfaces_data)
     return np.array(surfaces_data)
-
-# Function to calculate drag and lift for a given spacecraft
-def calculate_aerodynamic_forces(v_rel, rho, surface_properties, C_D, C_L, area_reference, spacecraft_mass):
-    a_drag_total = np.zeros(3)  # Initialize drag acceleration vector
-    a_lift_total = np.zeros(3)  # Initialize lift acceleration vector
-    
-    # Loop through the surfaces and calculate drag and lift contributions
-    for surface in surface_properties:
-        normal_vector = np.array(surface[:3])  # Extract normal vector
-        projected_area = surface[3]  # Extract projected area
-        
-        # Calculate drag coefficient for this surface
-        B_D = (projected_area * C_D) / spacecraft_mass
-        
-        # Calculate lift coefficient for this surface
-        B_L = (projected_area * C_L) / spacecraft_mass
-        
-        # Drag acts opposite to velocity
-        drag_direction = -v_rel / np.linalg.norm(v_rel)
-        
-        # Lift acts perpendicular to velocity and normal vector
-        lift_direction_temp = np.cross(np.cross(v_rel,normal_vector),v_rel)
-        lift_direction = lift_direction_temp / np.linalg.norm(lift_direction_temp)  # Normalize
-        
-        # Calculate the contribution to drag acceleration from this surface
-        a_drag = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_D * drag_direction * 0
-        a_drag_total += a_drag
-        
-        # Calculate the contribution to lift acceleration from this surface
-        a_lift = 0.5 * rho * np.dot(normal_vector, v_rel) * np.linalg.norm(v_rel) * B_L * lift_direction * 1
-        a_lift_total += a_lift
-    
-    return a_drag_total, a_lift_total
 
 # Function to calculate drag and lift for a given spacecraft
 def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA):
@@ -122,14 +103,14 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA
         lift_direction = np.cross(lift_direction_normalized, v_inc_normalized)
         
         # Calculate the contribution to drag acceleration from this surface
-        a_drag = 0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 0
+        a_drag = 0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 1
         a_drag_total += a_drag/spacecraft_mass
         
         # Calculate the contribution to lift acceleration from this surface
-        a_lift = 0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 0
+        a_lift = 0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 1
         a_lift_total += a_lift/spacecraft_mass
     
-    return a_drag_total, a_lift_total
+    return a_drag_total, a_lift_total, C_D, C_L, projected_area
 
 # Generic function to compute aerodynamic forces for a spacecraft entity
 def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
@@ -158,22 +139,26 @@ def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
     # print("altitude----------------",h)
     # print("rho----------------",rho)
     # Lookup surface properties based on the angle of attack
-    surface_properties = lookup_surface_properties(AOA*180/np.pi, loaded_polynomials)
+    #surface_properties = lookup_surface_properties(AOA*180/np.pi, loaded_polynomials)
+
+    surface_properties  = lookup_table_surface_properties(AOA*180/np.pi,  loaded_lookup_table)  
+    
     
     
     # Calculate drag and lift for the spacecraft
-    a_drag, a_lift = calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T , entity_data,AOA)
+    a_drag, a_lift, CL, CD, pro_area = calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T , entity_data,AOA)
     # print("a_drag",a_drag)
     # print("a_lift",a_lift)
-    return a_drag, a_lift
+    return a_drag, a_lift, CL, CD, pro_area
 
 # Main function to compute forces for multiple spacecraft
 def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr):
+    print("alpha_list",alpha_list, "vv",vv, "rr",rr)
     # vv and rr are matrix
     forces = []
     for i, alpha in enumerate(alpha_list):
         entity_data = data # we need to add two spacecraft details
-        a_drag, a_lift = compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv[i], rr[i])
+        a_drag, a_lift, CL, CD, pro_area = compute_aerodynamic_forces(entity_data, loaded_polynomials, alpha, vv[i], rr[i])
         # print(a_drag)
         # print(a_lift)
         rel_f = np.matmul(C1(alpha),np.array(a_drag + a_lift))
@@ -185,7 +170,7 @@ def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr):
 
 
 
-    return F_LVLH_l
+    return F_LVLH_l, a_lift , a_drag ,CL, CD, pro_area
 
 # Function to load the precomputed polynomial coefficients from a file
 def load_polynomials(filename='polynomials.pkl'):
@@ -242,40 +227,70 @@ loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Pro
 
 
 
-# # Example usage:
-# if __name__ == "__main__":
-#     # Load the polynomial coefficients from a saved file
-#     loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
+# Example usage:
+if __name__ == "__main__":
+    # Load the polynomial coefficients from a saved file
+    loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
     
-#     # Assume `data`, `vv`, `rr`, `alpha_list`, and `h_list` are defined
-#     # `alpha_list` contains angles of attack for each entity (chief, deputy, or others)
-#     # `h_list` contains the altitudes for each entity
+    # Assume `data`, `vv`, `rr`, `alpha_list`, and `h_list` are defined
+    # `alpha_list` contains angles of attack for each entity (chief, deputy, or others)
+    # `h_list` contains the altitudes for each entity
 
-#     # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
-#     data={"J":[0.1082626925638815e-2,0,0],"S/C":[300,2,0.9,300],"Primary":[3.98600433e5,6378.16,7.2921150e-5]}
+    # data={"J":[J2,J3,J4],"S/C":[M_SC,A_cross,C_D,Ballistic coefficient],"Primary":[mu,RE.w]}
+# Parameters that is of interest to the problem
 
-#     # Example data for one or more entities
-#     r1 = np.array([100.7097218, -6000.5465031, -3291.97461733])
-#     print(np.linalg.norm(r1))
-#     v1 = np.array([0.05719481, -3.95747941, 6.78077862])
+    data = {
+        "Primary": [3.98600433e5,6378.16,7.2921150e-5],
+        "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
 
-#     r2 = np.array([82.15330852, -5684.43257548, -3114.50144513])
-#     v2 = np.array([0.05410418, -3.74362997, 6.90235197])
+        # Satellites data including chief and deputies
+        "satellites": {
+            "chief": {
+                "mass": 300,         # Mass in kg
+                "area": 2,           # Cross-sectional area in m^2
+                "C_D": 0.9,          # Drag coefficient
+            },
+            "deputy_1": {
+                "mass": 250,
+                "area": 1.8,
+                "C_D": 0.85,
+            }
+        },
+        "N_deputies": 2,  # Number of deputies
+        "sat": [0.0412, 0.0412,1.2],  # Moment of inertia for each satellite
+        "T_period": 2000.0,  # Period of the sine wave
+    }
 
-#     print("Loading density model...")
+    print("Parameters initialized.")
+
+    satellite_key = f"deputy_1"  # Access deputy names dynamically
+    satellite_properties = data["satellites"][satellite_key]    
+    data_deputy = {}
+    data_deputy['Primary'] = data['Primary']
+    data_deputy['S/C'] = [satellite_properties["mass"], satellite_properties["area"]]
+
+    # Example data for one or more entities
+    r1 = np.array([2347.3093079 , -3943.69432762 , 4716.01627407])
+    print(np.linalg.norm(r1))
+    v1 = np.array([2.0969191, 6.24384464, 4.16757144])
+
+    r2 = np.array([82.15330852, -5684.43257548, -3114.50144513])
+    v2 = np.array([0.05410418, -3.74362997, 6.90235197])
+
+    print("Loading density model...")
 
 
-#     print("Computing forces for entities...")
-#     print(np.linalg.norm(r1))
+    print("Computing forces for entities...")
+    print(np.linalg.norm(r1))
 
-#     # vv = np.vstack([v1, v2])
-#     # rr = np.vstack([r1, r2])
+    # vv = np.vstack([v1, v2])
+    # rr = np.vstack([r1, r2])
 
-#     vv = np.vstack([v1])
-#     rr = np.vstack([r1])
-#     h_list = [200]  # Altitude for each entity
-#     alpha_list = [80*np.pi/180]  # Angle of attack for each entity
-#     forces = compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
+    vv = np.vstack([v1])
+    rr = np.vstack([r1])
+    h_list = [200]  # Altitude for each entity
+    #alpha_list = [80*np.pi/180]  # Angle of attack for each entity
+    #forces = compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
     
 # # Assuming forces is a 2xN array where the first row is drag and the second row is lift
 # for i in range(forces.shape[1]):
@@ -284,3 +299,139 @@ loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Pro
 #     print(f"Entity {i+1} drag acceleration: {a_drag}")
 #     print(f"Entity {i+1} lift acceleration: {a_lift}")
 
+# Define alpha range from 0 to 360 degrees (in radians)
+alpha_degrees = np.arange(0, 360, 1)
+alpha_list = np.deg2rad(alpha_degrees)  # Convert degrees to radians
+
+# Initialize arrays to store the drag and lift forces and their directions
+drag_forces = []
+lift_forces = []
+area_pro = []
+CD_list = []
+CL_list = []
+drag_directions = []
+lift_directions = []
+
+# Initialize arrays to store the combined forces in the LVLH frame
+combined_forces_magnitudes = []
+combined_forces_directions = []
+
+# Loop over each alpha and calculate the forces
+for alpha in alpha_list:
+    combined_force_lvlh, L, D, CL, CD, pro_area = compute_forces_for_entities(data_deputy, loaded_polynomials, [alpha], vv, rr)
+
+
+    # Calculate magnitude of the combined force
+    combined_force_magnitude = np.linalg.norm(combined_force_lvlh)
+    combined_forces_magnitudes.append(combined_force_magnitude)
+
+
+    # Calculate unit vector (direction) for the combined force
+    combined_force_direction = combined_force_lvlh / combined_force_magnitude if combined_force_magnitude > 0 else np.array([0, 0, 0])
+    combined_forces_directions.append(combined_force_direction)
+
+    # Calculate magnitudes of drag and lift forces
+    drag_magnitude = np.linalg.norm(D)
+    lift_magnitude = np.linalg.norm(L)
+    
+    # Append magnitudes to lists
+    drag_forces.append(drag_magnitude)
+    lift_forces.append(lift_magnitude)
+    area_pro.append(pro_area)
+    CD_list.append(CD)
+    CL_list.append(CL)
+    
+    # Calculate unit vectors (directions)
+    drag_direction = D / drag_magnitude if drag_magnitude > 0 else np.array([0, 0, 0])
+    lift_direction = L / lift_magnitude if lift_magnitude > 0 else np.array([0, 0, 0])
+    
+    # Append directions to lists
+    drag_directions.append(drag_direction)
+    lift_directions.append(lift_direction)
+
+# Convert lists to numpy arrays for easier plotting
+drag_forces = np.array(drag_forces)
+lift_forces = np.array(lift_forces)
+area_pro = np.array(area_pro)
+drag_directions = np.array(drag_directions)
+lift_directions = np.array(lift_directions)
+
+
+
+# Convert lists to numpy arrays for easier plotting
+combined_forces_magnitudes = np.array(combined_forces_magnitudes)
+combined_forces_directions = np.array(combined_forces_directions)
+
+# Plot combined force magnitude with respect to alpha
+plt.figure()
+plt.plot(alpha_degrees, combined_forces_magnitudes, label="Combined Force Magnitude (LVLH)")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Force Magnitude (N)")
+plt.title("Combined Force Magnitude in LVLH Frame vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+# Plot combined force direction components over angles
+plt.figure()
+plt.plot(alpha_degrees, combined_forces_directions[:, 0], label="Combined Force Direction X (LVLH)")
+plt.plot(alpha_degrees, combined_forces_directions[:, 1], label="Combined Force Direction Y (LVLH)")
+plt.plot(alpha_degrees, combined_forces_directions[:, 2], label="Combined Force Direction Z (LVLH)")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Combined Force Direction (Unit Vector Components)")
+plt.title("Combined Force Direction Components in LVLH Frame vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+
+# Plot drag and lift forces with respect to alpha
+plt.figure()
+plt.plot(alpha_degrees, drag_forces, label="Drag Force Magnitude")
+plt.plot(alpha_degrees, lift_forces, label="Lift Force Magnitude")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Force (N)")
+plt.title("Drag and Lift Force Magnitudes vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+# Plot projected area with respect to alpha
+plt.figure()
+plt.plot(alpha_degrees, area_pro, label="Projected Area")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Projected Area (m^2)")
+plt.title("Projected Area vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+# Plot drag and lift coefficients with respect to alpha
+plt.figure()
+plt.plot(alpha_degrees, CD_list, label="Drag Coefficient")
+plt.plot(alpha_degrees, CL_list, label="Lift Coefficient")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Coefficient")
+plt.title("Drag and Lift Coefficients vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+# Plot drag direction components over angles
+plt.figure()
+plt.plot(alpha_degrees, drag_directions[:, 0], label="Drag Direction X")
+plt.plot(alpha_degrees, drag_directions[:, 1], label="Drag Direction Y")
+plt.plot(alpha_degrees, drag_directions[:, 2], label="Drag Direction Z")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Drag Direction (Unit Vector Components)")
+plt.title("Drag Force Direction Components vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+# Plot lift direction components over angles
+plt.figure()
+plt.plot(alpha_degrees, lift_directions[:, 0], label="Lift Direction X")
+plt.plot(alpha_degrees, lift_directions[:, 1], label="Lift Direction Y")
+plt.plot(alpha_degrees, lift_directions[:, 2], label="Lift Direction Z")
+plt.xlabel("Angle of Attack (degrees)")
+plt.ylabel("Lift Direction (Unit Vector Components)")
+plt.title("Lift Force Direction Components vs. Angle of Attack")
+plt.legend()
+plt.grid()
+
+plt.show()
