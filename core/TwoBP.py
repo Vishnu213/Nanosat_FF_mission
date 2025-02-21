@@ -69,6 +69,10 @@ def car2kep(r,v,mu):
     
 
     if numpy.isnan(e_vec).any() or numpy.isnan(N).any():
+        print("r",r)
+        print("v",v)
+        print("h",h)
+        print("r_mag, v_mag, h_mag",r_mag,v_mag,h_mag)
         print("Eccentricity is not defined")
     
     # print("################",e_vec,e_mag, N, N_mag)
@@ -85,7 +89,15 @@ def car2kep(r,v,mu):
 
     # True anomaly (theta)
     if e_mag != 0:
-        theta = numpy.arccos(numpy.dot(e_vec / e_mag, r / r_mag))
+        # print("e_vec",e_vec)
+        # print("e_mag",e_mag)
+        # print("r",r)
+        # print("r_mag",r_mag)
+        # print("v",v)
+        # print("v_mag",v_mag)
+        # print("theta",numpy.dot(e_vec / e_mag, r / r_mag))
+        theta_clip =np.clip(numpy.dot(e_vec / e_mag, r / r_mag), -1.0, 1.0)
+        theta = numpy.arccos(theta_clip)
         if numpy.dot(r, v) < 0:
             theta = 2 * numpy.pi - theta
     else:
@@ -235,7 +247,7 @@ def NSROE2car(ROE,param):
     rp=a*(1-e)
     n = numpy.sqrt(mu/(a**3))
 
-    if e==0:  
+    if e==0.0:  
         u = l
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
     else:
@@ -253,8 +265,8 @@ def NSROE2car(ROE,param):
         + numpy.sin( u ) * numpy.array([ 0, 1, 0 ]) )
     vp = ( mu / h ) * ( -numpy.sin( u ) * numpy.array([ 1 , 0 , 0 ]) + ( e + numpy.cos( u ) ) * numpy.array([ 0 , 1 , 0 ]) ) ;
 
-    RR=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(rp))
-    VV=numpy.matmul(PQW2ECI(OM,omega_peri,i),numpy.transpose(vp))
+    RR=numpy.matmul(PQW2ECI(OM,u,i),numpy.transpose(rp))
+    VV=numpy.matmul(PQW2ECI(OM,u,i),numpy.transpose(vp))
 
 
     return (RR,VV)
@@ -303,6 +315,8 @@ def OE_Timetotheta(COE,T,mu):
 def M2theta(M,e,tol):
 
     if numpy.isnan(e) or numpy.isnan(M):
+        print("M",M)
+        print("e",e)
         print("Eccentricity is not defined")
     if M < numpy.pi :
         E0=M + (e/2)
@@ -731,7 +745,7 @@ def lagrage_J2_diff(t,yy,data):
     OM = yy[5]
 
 
-
+    
 
 
     e=numpy.sqrt(q1**2 + q2**2)
@@ -750,12 +764,15 @@ def lagrage_J2_diff(t,yy,data):
     else:
         omega_peri = numpy.arccos(q1 / e)
         mean_anamoly = l - omega_peri
+        # print("mean_anamoly",mean_anamoly)
+        # print("e",e)
+        # print("omega_peri",omega_peri)
         theta_tuple = M2theta(mean_anamoly, e, 1e-8)
         theta = theta_tuple[0]
         u = theta + omega_peri
         r = (a * eta**2) / (1 + (q1 * numpy.cos(u)) + (q2 * numpy.sin(u)))
 
-    epsilon = 1*J2 * (Re / p)**2 * n
+    epsilon = 0*J2 * (Re / p)**2 * n
 
     # Compute each component
     component_1 = 0
@@ -825,7 +842,7 @@ def Lagrange_deri(t,yy,param):
         
     # rr,vv=kep2car(numpy.array([h,yy[1],yy[2],yy[3],yy[4],yy[5]]),mu)
 
-    epsilon =  1*data["J"][0] * ((data["Primary"][1] / p)**2) * n
+    epsilon =  0*data["J"][0] * ((data["Primary"][1] / p)**2) * n
 
 
     # perturbations
@@ -1390,6 +1407,7 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     test_4 = (delta_q1**2 + delta_q2**2)
     test_5 = (q1 * delta_q1 + q2 * delta_q2)**2
     test_6 = (test_2 + test_3 + test_4 - test_5)
+    e1 = test_1 * test_6**0.5
     # print("test_1",test_1)
     # print("test_2",test_2)
     # print("test_3",test_3)

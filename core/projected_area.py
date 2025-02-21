@@ -159,7 +159,7 @@ def lookup_table_surface_properties(angle, lookup_table):
             normal = properties['normal']
             projected_area = properties['projected_area']
             
-            if projected_area > 0:  # Only consider valid surfaces with positive projected area
+            if projected_area > 1e-4:  # Only consider valid surfaces with positive projected area
                 surfaces_data.append([normal[0], normal[1], normal[2], projected_area])
     else:
         print(f"Angle {angle_str} not found in lookup table.")
@@ -188,28 +188,30 @@ if __name__ == "__main__":
         json.dump(serializable_lookup_table, f, indent=4)
     
     # # Fit polynomials to the lookup table
-    # poly_coeffs = fit_polynomials(lookup_table)
+    poly_coeffs = fit_polynomials(lookup_table)
     
     # # Save the polynomial functions to a file
     # save_polynomials(poly_coeffs, 'C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nano_sat_casadi\\Nanosat_FF_mission\\helper_files\\polynomials_projected_area_test.pkl')
     
-    # # Later, you can load the polynomial functions from the file
-    # loaded_polynomials = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nano_sat_casadi\\Nanosat_FF_mission\\helper_files\\polynomials_projected_area.pkl')
+    # Later, you can load the polynomial functions from the file
+    loaded_polynomials = load_polynomials('C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nano_sat_casadi\\Nanosat_FF_mission\\helper_files\\polynomials_projected_area.pkl')
 
 
 
     # Example usage after loading
     lookup_table_path = 'C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nano_sat_casadi\\Nanosat_FF_mission\\helper_files\\lookup_table_projected_area.json'
-    loaded_lookup_table = load_lookup_table(lookup_table_path)
+    lookup_table = load_lookup_table(lookup_table_path)
 
     # Test the lookup for an angle of attack (in degrees, e.g., 10 degrees)
-    test_angle = 0
-    surface_properties = lookup_table_surface_properties(test_angle, loaded_lookup_table)
+    test_angle = 90
+    surface_properties = lookup_table_surface_properties(test_angle, lookup_table)
     
     print(f"Surface properties for angle of attack = {test_angle} degrees:")
     print("Normal vectors and projected areas:")
     print(surface_properties)
     exit()
+    
+
 
     # Initialize lists to store the real and fitted values for each surface
     real_projected_areas_front = []
@@ -218,30 +220,32 @@ if __name__ == "__main__":
     fitted_back_projected_areas = []
     angles = np.linspace(0, 360, 361)
     # Loop through each angle to extract real values and compute fitted values for the front surface
-    for angle in angles:
+    for angle_deg in angles:
+        angle = str(int(angle_deg))
+        print(lookup_table[angle])
         # Real value from the lookup table
         if 'front' in lookup_table[angle]:  # Check if 'front' surface data is available at this angle
             real_projected_areas_front.append(lookup_table[angle]['front']['projected_area'])
         else:
             real_projected_areas_front.append(0)  # Use 0 if the surface is not facing the velocity direction
 
-        if 'back' in lookup_table[angle]:
-            real_back_projected_areas.append(lookup_table[angle]['back']['projected_area'])
+        if 'bottom' in lookup_table[angle]:
+            real_back_projected_areas.append(lookup_table[angle]['bottom']['projected_area'])
         else:
             real_back_projected_areas.append(0)
 
 
-        # Fitted value using polynomial coefficients
-        fitted_projected_area = np.polyval(poly_coeffs['front']['area'], angle)
-        fitted_projected_areas_front.append(fitted_projected_area)
+        # # Fitted value using polynomial coefficients
+        # fitted_projected_area = np.polyval(poly_coeffs['front']['area'], angle)
+        # fitted_projected_areas_front.append(fitted_projected_area)
 
-        fitted_back_projected_area = np.polyval(poly_coeffs['back']['area'], angle)
-        fitted_back_projected_areas.append(fitted_back_projected_area)
+        # fitted_back_projected_area = np.polyval(poly_coeffs['back']['area'], angle)
+        # fitted_back_projected_areas.append(fitted_back_projected_area)
 
     # Plot real and fitted values for the front surface
     plt.figure()
     plt.plot(angles, real_projected_areas_front, label='Real Projected Area (Front)', linestyle='--')
-    plt.plot(angles, fitted_projected_areas_front, label='Fitted Projected Area (Front)', linestyle='-')
+    # plt.plot(angles, fitted_projected_areas_front, label='Fitted Projected Area (Front)', linestyle='-')
     plt.xlabel('Angle of Attack (degrees)')
     plt.ylabel('Projected Area')
     plt.title('Comparison of Real and Fitted Projected Areas for Front Surface')
@@ -250,7 +254,7 @@ if __name__ == "__main__":
     plt.figure()
     # Plot real and fitted values for the front surface
     plt.plot(angles, real_back_projected_areas, label='Real Projected Area (BACK)', linestyle='--')
-    plt.plot(angles, fitted_back_projected_areas, label='Fitted Projected Area (BACK)', linestyle='-')
+    # plt.plot(angles, fitted_back_projected_areas, label='Fitted Projected Area (BACK)', linestyle='-')
     plt.xlabel('Angle of Attack (degrees)')
     plt.ylabel('Projected Area')
     plt.title('Comparison of Real and Fitted Projected Areas for back Surface')

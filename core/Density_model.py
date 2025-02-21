@@ -104,5 +104,5 @@ with open("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\
     target_scaler = pickle.load(f)
 
 
-# a=density_get(200,0,0.707, model, scaler, target_scaler)
-# print(a)
+rho, M , T=density_get(400,0,0.707, model_density, scaler, target_scaler)
+print(rho, M , T)

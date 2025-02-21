@@ -18,6 +18,7 @@ from TwoBP import (
 from lift_drag import compute_forces_for_entities, loaded_polynomials
 
 uu_ind = []
+uu_deputy = []
 uu_log =[]
 
 
@@ -354,7 +355,7 @@ def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
 
 
 def Dynamics(t, yy, param,uu):
-    global uu_ind, uu_log
+    global uu_ind, uu_log, uu_deputy
     start_idx = 0
     chief_state = yy[6:12]
     y_dot_chief, u_c = absolute_NSROE_dynamics(t, chief_state, param,yy)
@@ -385,11 +386,14 @@ def Dynamics(t, yy, param,uu):
     # print("u_deputy",u_deputy)
     # print("u_c",uu_ind)
     uu_ind.append(u_deputy)
-    uu_log.append(uu_ind)
-    uu_ind = []
     # u_deputy = numpy.zeros((3))
     # calculate the differential aerodynamic forces
     u =  u_deputy - u_c
+
+    uu_ind.append(u)
+    uu_log.append(uu_ind)
+    uu_ind = []
+    # uu_deputy.append(u)
     # print("u _differential",u)
     #print("u_c",u_c)
     # Compute the Lagrange matrix (A) and B-matrix for the deputy

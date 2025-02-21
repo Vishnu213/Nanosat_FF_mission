@@ -69,6 +69,8 @@ def calculate_cd_cl(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc):
     # Get the coefficients Pi, Q, G, Zi, and v_rem
     P_i, Q, G, Z_i, v_rem = compute_coefficients(v_inc, Ma, Ta, gamma_i, l_i, alpha_acc)
     
+
+
     # Calculate Drag Coefficient (CDi)
     Cd = (S_i / S_ref_i) * (P_i / np.sqrt(np.pi) + gamma_i * Q * Z_i + 
                             (gamma_i * v_rem) / (2 * v_inc) * (gamma_i * np.sqrt(np.pi) * Z_i + P_i))
@@ -83,7 +85,7 @@ def calculate_cd_cl(S_i, S_ref_i, gamma_i, l_i, v_inc, Ma, Ta, alpha_acc):
 
 # Function to calculate Cd and Cl for different angles of attack (0 to 360 degrees)
 def calculate_cd_cl_for_angles(S_i, S_ref_i, l_i, v_inc, Ma, Ta, alpha_acc):
-    angles = np.linspace(0, 360, 360)  # Angles from 0 to 360 degrees
+    angles = np.arange(110, 120, 1)  # Angles from 0 to 360 degrees
     Cd_values = []
     Cl_values = []
     

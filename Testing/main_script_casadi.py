@@ -216,8 +216,8 @@ print("Integrated states shape:", integrated_states.shape)
 time_grid = np.linspace(0, T_total, len(integrated_states[0]))
 
 # save the numpy array
-numpy.save('solution_x_100_30.npy', integrated_states)
-numpy.save('time_grid_100_30.npy', time_grid)
+# numpy.save('solution_x_100_30.npy', integrated_states)
+# numpy.save('time_grid_100_30.npy', time_grid)
 
 
 # Generate the LVLH Frame positions from CasADi results
