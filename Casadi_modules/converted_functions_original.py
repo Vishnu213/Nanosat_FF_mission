@@ -32,7 +32,7 @@ def M2theta_casadi(M, e, tol=1e-10, max_iter=20):
 
 
 def NSROE2car_casadi(ROE, param):
-    mu = param["Primary"][0]
+    mu = param[0,0]
 
     # Assigning the state variables
     a = ROE[0]
@@ -300,9 +300,9 @@ def lagrange_J2_diff_casadi(t, yy, data):
     f_dot = ca.MX.zeros(6)
     
     # Extract data
-    mu = data["Primary"][0]
-    Re = data["Primary"][1]
-    J2 = data["J"][0]
+    mu = data[0,0]
+    Re = data[0,1]
+    J2 = data[1,0]
 
     # Assigning the state variables
     a = yy[0]
@@ -481,29 +481,37 @@ def custom_wave(t, period, high_value, low_value, transition_fraction, total_orb
 
 def yaw_dynamics_casadi(t, yy, param, uu):
     # Extracting parameters for inertia
-    Izc = param["sat"][0]  # Chief satellite's moment of inertia
-    Izd = param["sat"][1]  # Deputy satellite's moment of inertia
+    Izc = param[5,0]  # Chief satellite's moment of inertia
+    Izd = param[5,1]  # Deputy satellite's moment of inertia
 
     # Initialize symbolic state derivatives and control input
     y_dynamics = ca.MX.zeros(4, 1)
+
+    yy[0] = ca.if_else(yy[0] > 2 * ca.pi, yy[0] - 2 * ca.pi, yy[0])
+    yy[0] = ca.if_else(yy[0] <  -2*np.pi, yy[0] + 2 * ca.pi, yy[0])
+
+    yy[1] = ca.if_else(yy[1] > 2 * ca.pi, yy[1] - 2 * ca.pi, yy[1])
+    yy[1] = ca.if_else(yy[1] <  -2*np.pi, yy[1] + 2 * ca.pi, yy[1])
+    
 
     # Extract angular velocities (yaw rates) from yy (assuming yy[14] and yy[15] are angular velocities)
     y_dot_c = yy[14]  # Chief satellite angular velocity
     y_dot_d = yy[15]  # Deputy satellite angular velocity
 
-    T = param["T_period"]
+    T = param[9,0]  # Period of the custom wave
     
+
     # Control gains
-    Kp = 100
-    Kd = 20
+    Kp = 7e-7
+    Kd = 2e-4
     
     # Control limits (min and max torque values)
     control_min = -23e-4
     control_max = 23e-4
 
     # Custom wave applied to control yaw angle (90 degrees to 0 degrees with smooth transitions)
-    wave_output = custom_wave(t, T, 90 * ca.pi / 180, 0, 0.5,1)
-    wave_output_1 = custom_wave(t, T,0* 90 * ca.pi / 180, 0, 0.5,1)
+    wave_output = custom_wave(t, T, 90 * ca.pi / 180, 0, 0.5,10)
+    wave_output_1 = custom_wave(t, T,0* 90 * ca.pi / 180, 0, 0.5,10)
     
     # PID control law for the chief satellite
     e_current = wave_output - yy[12]  # Current error for chief
@@ -578,8 +586,8 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
     a_drag_total = ca.MX.zeros(3)  # Initialize drag acceleration vector
     a_lift_total = ca.MX.zeros(3)  # Initialize lift acceleration vector
     
-    spacecraft_mass = data["S/C"][0]  # Spacecraft mass (kg)
-    Area = data["S/C"][1]  # Cross-sectional area (m^2)
+    spacecraft_mass = data[1,0]  # Spacecraft mass (kg)
+    Area = data[1,1]  # Cross-sectional area (m^2)
     
     #print("eqweqweweqwe",surface_properties.shape)
     surface_splits = ca.vertsplit(surface_properties, 1)
@@ -624,8 +632,8 @@ def calculate_aerodynamic_forces_casadi(v_rel, rho, surface_properties, M, T, da
         lift_direction = ca.cross(lift_direction_normalized, v_inc_normalized)
 
         # Compute drag and lift accelerations
-        a_drag = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_D) * drag_direction # 1e2
-        a_lift = 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_L) * lift_direction 
+        a_drag = - 0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_D) * drag_direction # 1e2
+        a_lift = -0.5 * rho * (v_inc * km2m) ** 2 * (1 / B_L) * lift_direction 
 
         # Apply CasADi if_else to set a_drag and a_lift to zero if projected_area is 404
         a_drag = ca.if_else(ca.sum1(projected_area) == 404, ca.MX.zeros(3), a_drag)
@@ -751,11 +759,11 @@ def compute_aerodynamic_forces_casadi(entity_data, loaded_polynomials, AOA, vv, 
     assert rr.shape == (3, 1), f"rr shape mismatch: expected (3, 1), got {rr.shape}"
     
     # Extract symbolic values from the dictionary
-    spacecraft_mass_sym = entity_data["S/C"][0]
-    area_sym = entity_data["S/C"][1]
-    primary_gravity_sym = entity_data["Primary"][0]
-    primary_radius_sym = entity_data["Primary"][1]
-    primary_rotation_sym = entity_data["Primary"][2]
+    spacecraft_mass_sym = entity_data[1,0]
+    area_sym = entity_data[1,1]
+    primary_gravity_sym = entity_data[0,0]
+    primary_radius_sym = entity_data[0,1]
+    primary_rotation_sym = entity_data[0,2]
 
     # Reshape vv and rr
     vv = ca.reshape(vv, 3, 1)
@@ -870,12 +878,12 @@ def Lagrange_deri_casadi(t, yy, param):
     CasADi version of Lagrange_deri function using ca.if_else for symbolic logic.
     """
     # Extracting necessary parameters
-    mu = param["Primary"][0]
-    J2 = param["J"][0]
-    Re = param["Primary"][1]
-    q1_0 = param["Init"][0]
-    q2_0 = param["Init"][1]
-    t0 = param["Init"][2]
+    mu = param[0,0]
+    J2 = param[1,0]
+    Re = param[0,1]
+    q1_0 = param[10,0]
+    q2_0 = param[10,1]
+    t0 = param[10,2]
 
     # Assigning the state variables from yy
     a = yy[0]
@@ -961,7 +969,7 @@ def guess_nonsingular_Bmat_casadi(t, yy, param):
         B_mat: CasADi SX or MX matrix (6x6)
     """
     
-    mu = param["Primary"][0]
+    mu = param[0,0]
     a = yy[0]
     l = yy[1]
     i = yy[2]
@@ -1032,8 +1040,15 @@ def absolute_NSROE_dynamics_casadi(t, yy, param, yy_o):
 
     # Prepare the data for the chief satellite
     data = {}
-    data['Primary'] = param['Primary']
-    data['S/C'] = [param["satellites"]["chief"]["mass"], param["satellites"]["chief"]["area"]]
+    data['Primary'] = [param[0,0], param[0,1], param[0,2]]
+    data['S/C'] = [param[2,0], param[2,1]]
+
+    data = ca.MX.zeros(2,3)
+    data[0,0] = param[0,0]
+    data[0,1] = param[0,1]
+    data[0,2] = param[0,2]
+    data[1,0] = param[2,0]
+    data[1,1] = param[2,1]
 
     # Use CasADi vectors for rr and vv
     rr_1 = ca.vertcat(rr)
@@ -1051,9 +1066,11 @@ def absolute_NSROE_dynamics_casadi(t, yy, param, yy_o):
 
 import casadi as ca
 
-def Dynamics_casadi(t, yy, param, uu):
+def Dynamics_casadi(t, yy, uu, param):
+    a = param[0,0]
     start_idx = 0
     chief_state = yy[6:12]
+
 
     # assert ca.is_finite(yy), "Invalid value in state vector"
     # assert ca.is_finite(uu), "Invalid value in control input"
@@ -1071,11 +1088,20 @@ def Dynamics_casadi(t, yy, param, uu):
     rr_deputy, vv_deputy = NSROE2car_casadi(deputy_NSOE, param)
 
     # Prepare data for each deputy
-    satellite_key = f"deputy_1"
-    satellite_properties = param["satellites"][satellite_key]
-    data_deputy = {}
-    data_deputy['Primary'] = param['Primary']
-    data_deputy['S/C'] = [satellite_properties["mass"], satellite_properties["area"]]
+    # satellite_key = f"deputy_1"
+    # satellite_properties = param[3,]
+
+
+    data = {}
+    data['Primary'] = [param[0,0], param[0,1], param[0,2]]
+    data['S/C'] = [param[3,0], param[3,1]]
+
+    data_deputy = ca.MX.zeros(2,3)
+    data_deputy[0,0] = param[0,0]
+    data_deputy[0,1] = param[0,1]
+    data_deputy[0,2] = param[0,2]
+    data_deputy[1,0] = param[2,0]
+    data_deputy[1,1] = param[2,1]
 
     # Compute forces for the deputy
     u_deputy = compute_forces_for_entities_casadi(data_deputy, loaded_polynomials, yy[13], vv_deputy, rr_deputy)
@@ -1103,7 +1129,7 @@ import casadi as ca
 
 def NSROE2LVLH_casadi(NSROE, NSOE0, data):
     # Extract data parameters
-    mu = data["Primary"][0]
+    mu = data[0,0]
 
     # State variables from NSOE0
     a = NSOE0[0]
@@ -1182,26 +1208,41 @@ def con_chief_deputy_angle_casadi(yy, data):
     alpha = yy[12]
     #print("alpha", alpha)
 
-    range = np.array([0,-1,0])
-    range_sym = ca.MX(range)
+    range_l = np.array([0,-1,0])
+    range_sym_l = ca.MX(range_l)
 
     # CasADi-based calculations
     x_deputy = NSROE2LVLH_casadi(NSROE, NSOE0, data)
     rr, vv = NSROE2car_casadi(NSOE0, data)
-    rel_f = ca.mtimes(C1_casadi(alpha), range_sym)
+    rel_f = ca.mtimes(C1_casadi(alpha), range_sym_l)
     rel_f = ca.reshape(rel_f, 3, 1)
     x_r = ca.mtimes(Frenet2LVLH_casadi(rr, vv), rel_f)
     x_d = x_r - x_deputy
 
-    # Magnitudes
-    x_r_mag = ca.norm_2(x_r)
-    x_d_mag = ca.norm_2(x_d)
-    x_deputy_mag = ca.norm_2(x_deputy)
+
+    # deputy
+    range_d = np.array([0,-1,0])
+    range_sym_d = ca.MX(range_d)
+    deputy_NSOE = NSOE0 + NSROE
+    #print("deputy_NSOE",deputy_NSOE)
+    #print("chief_state",chief_state)
+    #print("delta_NSROE",delta_NSROE)
+    rr_d, vv_d = NSROE2car_casadi(deputy_NSOE,data)
+    rel_f_d = ca.mtimes(C1_casadi(yy[13]), range_sym_l)
+    rel_f_d = ca.reshape(rel_f_d, 3, 1)
+    x_r_d = ca.mtimes(Frenet2LVLH_casadi(rr_d, vv_d), rel_f_d)
 
 
-    # Calculate angle using the cosine rule
-    cos_theta = (x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2 * x_deputy_mag * x_d_mag)
-    angle_con = ca.acos(cos_theta)
+
+    # # Magnitudes
+    # x_r_mag = ca.norm_2(x_r)
+    # x_d_mag = ca.norm_2(x_d)
+    # x_deputy_mag = ca.norm_2(x_deputy)
+
+
+    # # Calculate angle using the cosine rule
+    # cos_theta = (x_deputy_mag**2 + x_d_mag**2 - x_r_mag**2) / (2 * x_deputy_mag * x_d_mag)
+    angle_con = ca.acos(ca.dot(x_d,x_r_d)/(ca.norm_2(x_d)*ca.norm_2(x_r_d)))
     # Debug point: Check cos_theta
 
 

@@ -78,7 +78,7 @@ def LVLHframe(rr,vv):
 
 
     # matrix to convert from IJK frame to RSW frame
-    Rot_LVLH = numpy.hstack([x_unit[:, numpy.newaxis], y_unit[:, numpy.newaxis], z_unit[:, numpy.newaxis]])
+    Rot_LVLH = numpy.column_stack([x_unit, y_unit, z_unit])
     return Rot_LVLH
 
 # FRENET FRAME
@@ -95,14 +95,14 @@ def Frenetframe(rr,vv):
 
 
     # matrix to convert from IJK frame to RSW frame
-    Rot_FrenetFrame = numpy.hstack([T_unit[:, numpy.newaxis], N_unit[:, numpy.newaxis], W_unit[:, numpy.newaxis]])
+    Rot_FrenetFrame = numpy.column_stack([T_unit, N_unit, W_unit])
     return Rot_FrenetFrame
 
 def Frenet2LVLH(rr,vv):
     RR_Frenet=Frenetframe(rr,vv)
     RR_LVLH = LVLHframe(rr,vv)
-    Rot_F2LVLH = numpy.matmul(RR_LVLH.transpose(),RR_Frenet)
-    return Rot_F2LVLH
+    Rot_Frenet2LVLH = numpy.matmul(RR_LVLH.transpose(),RR_Frenet)
+    return Rot_Frenet2LVLH
 
 # BODY FIXED FRAME
 

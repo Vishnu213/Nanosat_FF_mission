@@ -7,8 +7,8 @@
 # from TwoBP import M2theta as M2theta_original
 
 # # Import the CasADi-converted function
-# # Assuming it's saved in a file named 'converted_functions.py'
-# from converted_functions import M2theta_casadi
+# # Assuming it's saved in a file named 'converted_functions_original.py'
+# from converted_functions_original import M2theta_casadi
 
 # def test_M2theta():
 #     print("\nTesting M2theta_casadi() function...")
@@ -73,61 +73,61 @@ if module_path_casadi_converter not in sys.path:
 
 from TwoBP import M2theta as M2theta_original, NSROE2car as NSROE2car_original, PQW2ECI as PQW2ECI_original
 
-from converted_functions import M2theta_casadi, NSROE2car_casadi, PQW2ECI_casadi
+from converted_functions_original import M2theta_casadi, NSROE2car_casadi, PQW2ECI_casadi
 
 from CL_CD_modified_sentman import calculate_cd_cl 
-from converted_functions import calculate_cd_cl_casadi, calculate_rms_speed_casadi
+from converted_functions_original import calculate_cd_cl_casadi, calculate_rms_speed_casadi
 
 
 # Import the original and CasADi-converted functions from the relevant files
 from TwoBP import car2kep  # Original function from TwoBP.py
-from converted_functions import car2kep_casadi  # CasADi version from converted functions
+from converted_functions_original import car2kep_casadi  # CasADi version from converted functions
 
 from TwoBP import Param2NROE
-from converted_functions import Param2NROE_casadi
+from converted_functions_original import Param2NROE_casadi
 
 from TwoBP import lagrage_J2_diff
-from converted_functions import lagrange_J2_diff_casadi
+from converted_functions_original import lagrange_J2_diff_casadi
 
 
 from Transformations import (C1, C2, C3,
     PQW2ECI, RSW2ECI,
     LVLHframe, Frenet2LVLH)
 
-from converted_functions import (
+from converted_functions_original import (
     C1_casadi, C2_casadi, C3_casadi,
     PQW2ECI_casadi, RSW2ECI_casadi,
     LVLHframe_casadi, Frenet2LVLH_casadi
 )
 
 from dynamics import yaw_dynamics
-from converted_functions import yaw_dynamics_casadi
+from converted_functions_original import yaw_dynamics_casadi
 
 
 from TwoBP import car2NNSOE_density  # Assuming this is the original NumPy version
-from converted_functions import car2NNSOE_density_casadi  # CasADi version
+from converted_functions_original import car2NNSOE_density_casadi  # CasADi version
 
 
 from lift_drag import lookup_surface_properties  # Original function from TwoBP.py
-from converted_functions import lookup_surface_properties_casadi
+from converted_functions_original import lookup_surface_properties_casadi
 
 
-from converted_functions import calculate_aerodynamic_forces_casadi  # CasADi version
+from converted_functions_original import calculate_aerodynamic_forces_casadi  # CasADi version
 from lift_drag import calculate_aerodynamic_forces  # Python version
 
-from converted_functions import compute_aerodynamic_forces_casadi  # CasADi-converted function
+from converted_functions_original import compute_aerodynamic_forces_casadi  # CasADi-converted function
 from lift_drag import compute_aerodynamic_forces  # Python version
 
 
-from converted_functions import compute_forces_for_entities_casadi  # CasADi-converted function
+from converted_functions_original import compute_forces_for_entities_casadi  # CasADi-converted function
 from lift_drag import compute_forces_for_entities  # Python version
 
 
 from dynamics import absolute_NSROE_dynamics
-from converted_functions import absolute_NSROE_dynamics_casadi
+from converted_functions_original import absolute_NSROE_dynamics_casadi
 
 from constrains import con_chief_deputy_angle  
-from converted_functions import con_chief_deputy_angle_casadi
+from converted_functions_original import con_chief_deputy_angle_casadi
 
 tolerance = 1e-11
 
@@ -306,8 +306,8 @@ def test_car2kep_casadi():
 import numpy as np
 import casadi as ca
 from TwoBP import kep2car  # Original function
-from converted_functions import kep2car_casadi  # CasADi-converted function
-from converted_functions import PQW2ECI_casadi  # Ensure PQW2ECI_casadi is imported
+from converted_functions_original import kep2car_casadi  # CasADi-converted function
+from converted_functions_original import PQW2ECI_casadi  # Ensure PQW2ECI_casadi is imported
 
 def test_kep2car_casadi():
     # Test inputs
@@ -768,6 +768,7 @@ def test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, r
     rr_sym = ca.MX.sym('rr',rr.shape[0],rr.shape[1])
 
     # Call CasADi version of the function (symbolic)
+    print("data",data)
     forces_ca_sym = compute_forces_for_entities_casadi(data, loaded_polynomials, alpha_sym, vv_sym, rr_sym)
 
     # Define the CasADi function
@@ -802,7 +803,7 @@ def test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, r
 
 
 from dynamics import Lagrange_deri, guess_nonsingular_Bmat  # Make sure the import path is correct
-from converted_functions import Lagrange_deri_casadi, guess_nonsingular_Bmat_casadi  # Make sure the import path is correct
+from converted_functions_original import Lagrange_deri_casadi, guess_nonsingular_Bmat_casadi  # Make sure the import path is correct
 
 
 def create_sample_param():
@@ -1006,7 +1007,7 @@ def test_absolute_NSROE_dynamics():
 
 
 from dynamics import Dynamics  # Make sure the import path is correct
-from converted_functions import Dynamics_casadi  # Make sure the import path is correct
+from converted_functions_original import Dynamics_casadi  # Make sure the import path is correct
 
 # Test function for Dynamics_casadi
 def test_Dynamics_casadi():
@@ -1032,13 +1033,16 @@ def test_Dynamics_casadi():
         },
         "N_deputies": 2,  # Number of deputies
         "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
-
+    "T_MAX": 23e-6,  # Maximum torque (Nm)
+    "PHI_DOT": [0.1, 0.1],  # Limits for yaw rate (rad/s)
+    "PHI": [-ca.pi / 2, ca.pi / 2],  # Limits for yaw angle (rad)
+    "T_period": 2000.0, # Period of the sine wave
     }
 
     # Initial conditions for NOE_chief and yy_o from the reference script
     deg2rad = np.pi / 180
     NOE_chief = np.array([6500, 0.1, 63.45 * deg2rad, 0.5, 0.2, 270.828 * deg2rad])
-    yaw_c_d = np.array([0.12, 0.08])
+    yaw_c_d = np.array([0.12, 0.08,0,0])
     RNOE_0 = Param2NROE(NOE_chief, np.array([0, 0, 0, 0, 0, 0]), param)
     yy = np.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
@@ -1064,7 +1068,7 @@ def test_Dynamics_casadi():
 
 
     # Call the CasADi function for Dynamics
-    dynamics_casadi_sym = Dynamics_casadi(t_sym, yy_sym, param, uu_sym)
+    dynamics_casadi_sym = Dynamics_casadi(t_sym, yy_sym, uu_sym)
     dynamics_func = ca.Function('dynamics_func', [t_sym, yy_sym, uu_sym], [dynamics_casadi_sym])
 
     # Evaluate the CasADi function with numeric inputs
@@ -1081,7 +1085,7 @@ def test_Dynamics_casadi():
     assert np.allclose(y_python, y_casadi, atol=tolerance), f"Values mismatch: Python {y_python}, CasADi {y_casadi}"
 
 from TwoBP import NSROE2LVLH  # Make sure the import path is correct
-from converted_functions import NSROE2LVLH_casadi  # Make sure the import path is correct
+from converted_functions_original import NSROE2LVLH_casadi  # Make sure the import path is correct
 
 def test_NSROE2LVLH_casadi():
     data = {
@@ -1103,7 +1107,10 @@ def test_NSROE2LVLH_casadi():
         },
         "N_deputies": 2,  # Number of deputies
         "sat": [1.2, 1.2,1.2],  # Moment of inertia for each satellite
-
+    "T_MAX": 23e-6,  # Maximum torque (Nm)
+    "PHI_DOT": [0.1, 0.1],  # Limits for yaw rate (rad/s)
+    "PHI": [-ca.pi / 2, ca.pi / 2],  # Limits for yaw angle (rad)
+    "T_period": 2000.0  # Period of the sine wave
     }
 
     # Initial conditions for NOE_chief and yy_o from the reference script
@@ -1195,11 +1202,11 @@ def test_con_chief_deputy_angle():
 
 if __name__ == "__main__":
     # data, loaded_polynomials, alpha_list, vv, rr=get_test_data_multiple_entities()
-    # # v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
+    # v_rel, rho, surface_properties, M, T, data, AOA = get_test_data()
     # test_compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr)
 
-    # test_Dynamics_casadi()
-    # # test_con_chief_deputy_angle()
-    # test_NSROE2LVLH_casadi()
+    test_Dynamics_casadi()
+    # # # test_con_chief_deputy_angle()
+    #test_NSROE2LVLH_casadi()
 
-    test_con_chief_deputy_angle()
+    # test_con_chief_deputy_angle()

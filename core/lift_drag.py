@@ -108,11 +108,11 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA
         lift_direction = np.cross(lift_direction_normalized, v_inc_normalized)
         
         # Calculate the contribution to drag acceleration from this surface
-        a_drag = -0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 1
+        a_drag = -0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 0
         a_drag_total += a_drag/spacecraft_mass
         
         # Calculate the contribution to lift acceleration from this surface
-        a_lift = -0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 1
+        a_lift = -0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 0
         a_lift_total += a_lift/spacecraft_mass
 
         # Add the projected area to the combined projected area
@@ -207,7 +207,7 @@ def compute_aerodynamic_forces(entity_data, loaded_polynomials, AOA, vv, rr):
     
     
     rho = atmosphere(h)
-    print( "rho -----", rho)
+    # print( "rho -----", rho)
     # Calculate drag and lift for the spacecraft
     a_drag, a_lift, CD, CL, pro_area = calculate_aerodynamic_forces(v_rel, rho , surface_properties, M, T , entity_data,AOA)
     # print("a_drag",a_drag)
@@ -233,7 +233,7 @@ def compute_forces_for_entities(data, loaded_polynomials, alpha_list, vv, rr):
 
 
 
-    return F_LVLH_l # a_lift , a_drag ,CL, CD, pro_area ENABLE ME IF YOU WANT TO RUN THIS FILE
+    return F_LVLH_l #, a_lift , a_drag ,CL, CD, pro_area ### ENABLE ME IF YOU WANT TO RUN THIS FILE
 
 # Function to load the precomputed polynomial coefficients from a file
 def load_polynomials(filename='polynomials.pkl'):
@@ -284,8 +284,6 @@ def compute_ctau(delta, s):
 
 ## Loaded polynomial coefficients
 loaded_polynomials = load_polynomials("C:\\Users\\vishn\\Desktop\\My_stuffs\\Projects\\SDCS group\\Research\\Nanosat_FF_mission\\helper_files\\polynomials.pkl")
-
-
 
 
 
@@ -389,6 +387,7 @@ if __name__ == "__main__":
 
     # Loop over each alpha and calculate the forces
     for alpha in alpha_list:
+
         combined_force_lvlh, L, D, CL, CD, pro_area = compute_forces_for_entities(data_deputy, loaded_polynomials, [alpha], vv, rr)
 
 

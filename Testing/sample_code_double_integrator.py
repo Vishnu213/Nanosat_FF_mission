@@ -5,11 +5,12 @@ import matplotlib.pyplot as plt
 T = 50000  # Total time
 T_half = T / 2
 K = 1/0.0412   # System property, affecting the dynamics: x_ddot = K * u
-Kp = -0.000005 # Proportional gain
+Kp = -0.0000005 # Proportional gain
 Ki = -0  # Integral gain
 Kd = np.sqrt(4*(-Kp)/K)  # Derivative gain
 print((Kd**2))
 print(4*Kp)
+print(Kd)
 
 # Define desired signal
 def desired_signal(t):

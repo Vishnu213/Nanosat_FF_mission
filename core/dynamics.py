@@ -123,10 +123,10 @@ def half_half_curve(t, Torb, high_value, low_value, transition_fraction=0, total
     """
     # Calculate the full period to cover the specified number of orbits
     total_period = total_orbits * Torb
-    t_mod = np.mod(t, Torb)
+    t_mod = np.mod(t, total_period)
 
     # Determine the mid-point of each orbital period
-    mid_period = 0.5 * Torb
+    mid_period = total_period
     transition_time = transition_fraction * Torb
 
     if t > mid_period:
@@ -165,41 +165,44 @@ def yaw_dynamics(t, yy, param, uu):
     T = param["T_period"]
     
     # Control gains
-    Kp = 100
-    Kd = 20
+    Kp = 7e-7
+    Kd = 2e-4
     
     # Control limits (min and max torque values)
     control_min = -23e-6
     control_max = 23e-6
 
     # Custom wave applied to control yaw angle (90 degrees to 0 degrees with smooth transitions)
-    wave_output = half_half_curve(t, T, -90*np.pi / 180, 0, transition_fraction=0.1, total_orbits=1)
-    wave_output_1 = half_half_curve(t, T, 0, 0, transition_fraction=0.1, total_orbits=1)
+    wave_output = half_half_curve(t, T, 0, 90*np.pi / 180, transition_fraction=0.1, total_orbits=1)
+    wave_output_1 = half_half_curve(t, T, 90*np.pi / 180,0, transition_fraction=0.1, total_orbits=1)
     
     # PID control law for the chief satellite
     e_current = wave_output - yy[12]  # Current error for chief
     derivative = -y_dot_c
-    control_input = - Kp * e_current + Kd * derivative
+    control_input =  Kp * e_current + Kd * derivative
 
     # Clip the control input for chief to the specified range
     control_input_clipped = np.clip(control_input, control_min, control_max)
 
     # Chief satellite yaw dynamics
     y_dynamics[0] = y_dot_c  # Derivative of yaw angle (yaw rate) for chief
-    y_dynamics[2] = -Izc * control_input_clipped *0    # Derivative of yaw rate (angular acceleration) for chief
+    y_dynamics[2] = (1/Izc) * control_input     # Derivative of yaw rate (angular acceleration) for chief
 
     # PID control law for the deputy satellite
     e_current_1 = wave_output_1 - yy[13]  # Current error for deputy
-    derivative_1 = -0*y_dot_d
-    control_input_1 = - Kp * e_current_1 + Kd * derivative_1
+    derivative_1 = -y_dot_d
+    control_input_1 = Kp * e_current_1 + Kd * derivative_1
 
     # Clip the control input for deputy to the specified range
     control_input_1_clipped = np.clip(control_input_1, control_min, control_max)
 
     # Deputy satellite yaw dynamics
     y_dynamics[1] = y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
-    y_dynamics[3] = -Izd * control_input_1_clipped * 0  # Derivative of yaw rate (angular acceleration) for deputy
+    y_dynamics[3] = (1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
 
+    if y_dynamics[0] <0 or y_dynamics[1] <0:
+        print("YAW RATE NEGATIVE")
+        
 
 
     # Uncomment to print control inputs and time for debugging

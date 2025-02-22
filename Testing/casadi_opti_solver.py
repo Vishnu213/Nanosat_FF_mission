@@ -43,7 +43,6 @@ class StateVectorInterpolator:
 
 
 
-
 param = {
     "Primary": [3.98600433e5, 6378.16, 7.2921150e-5],
     "J": [0.1082626925638815e-2, 0, 0],  # J2, J3, J4 coefficients
@@ -60,10 +59,10 @@ param = {
         }
     },
     "N_deputies": 2,
-    "sat": [1.2, 1.2, 1.2],  # Moments of inertia
-    "T_MAX": [-23e-3, 23e-3],  # Maximum torque (Nm)
-    "PHI_DOT": [-0.1, 0.1],  # Limits for yaw rate (rad/s)
-    "PHI": [-4*np.pi / 2, 4*np.pi / 2]  # Limits for yaw angle (rad)
+    "sat": [0.0412, 0.0412, 1.2],  # Moments of inertia
+    "T_MAX": 23e-6,  # Maximum torque (Nm)
+    "PHI_DOT": [0.1, 0.1],  # Limits for yaw rate (rad/s)
+    "PHI": [-np.pi / 2, np.pi / 2]  # Limits for yaw angle (rad)
 }
 
 print("Parameters initialized.")

@@ -259,7 +259,7 @@ print("Deputy orbital elements -> ",a_d,l_d,i_d,q1_d,q2_d,OM_d)
 
 # angle of attack for the deputy spacecraft
 yaw_1 = 0*deg2rad  # [rad] - angle of attack = 0 assumption that V_sat = V_rel
-yaw_2 = 0*deg2rad  # [rad] - angle of attack = 0
+yaw_2 = 90*deg2rad  # [rad] - angle of attack = 0
 # 12 -> chief yaw angle
 # 13 -> deputy yaw angle
 # 14 -> deputy 1 yaw angle
@@ -273,21 +273,21 @@ print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
 
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
-# [6x1,6x1,2x1]
+# [6x1,6x1,4x1]
 yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
 
 # test for gauess equation
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
-n_revol_T = 365*24*60*60/Torb
-n_revolution= 100 #n_revol_T #n_revol_T
+n_revol_T = 1*60*60/Torb
+n_revolution= 2 #n_revol_T #n_revol_T
 T_total=n_revolution*Torb
 print("Orbital period",Torb, "Number of orbits",n_revol_T)
 
 
 t_span=[0,T_total]
-teval=numpy.linspace(0, T_total, 100000)
+teval=numpy.linspace(0, T_total, 10000)
 # K=numpy.array([k1,k2])
 
 data["Init"] = [NOE_chief[4],NOE_chief[3], 0]
@@ -374,7 +374,7 @@ for i in range(0,len(sol_y[0])):
     # print("yy1",yy1)
     # print("yy2",yy2)
     rr_s[:,i]=NSROE2LVLH(yy1,yy2,data)
-    angle_con=con_chief_deputy_vec_numeric(sol_y[:,i],data)
+    angle_con=con_chief_deputy_angle(sol_y[:,i],data)
     angle_con_array[i] = angle_con
 
     # print("############# constains angle", angle_con)
