@@ -108,11 +108,11 @@ def calculate_aerodynamic_forces(v_rel, rho, surface_properties, M, T, data, AOA
         lift_direction = np.cross(lift_direction_normalized, v_inc_normalized)
         
         # Calculate the contribution to drag acceleration from this surface
-        a_drag = -0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 0
+        a_drag = -0.5 * rho * (v_inc*km2m)**2  * (1/B_D) * drag_direction * 1
         a_drag_total += a_drag/spacecraft_mass
         
         # Calculate the contribution to lift acceleration from this surface
-        a_lift = -0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 0
+        a_lift = -0.5 * rho * (v_inc*km2m)**2 * (1/B_L) * lift_direction * 1
         a_lift_total += a_lift/spacecraft_mass
 
         # Add the projected area to the combined projected area

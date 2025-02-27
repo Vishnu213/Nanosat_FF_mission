@@ -162,12 +162,12 @@ print("ROE", NOE_chief)
 
 # Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
 
-rho_1 = 0 # [m]  - radial separation
-rho_3 =0 # [m]  - cross-track separation
+rho_1 = 1 # [m]  - radial separation
+rho_3 =1 # [m]  - cross-track separation
 alpha = 0*45* deg2rad#180 * deg2rad  # [rad] - angle between the radial and along-track separation
 beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0.000 #-10 # Drift per revolutions m/resolution
-d= -0.5# [m] - along track separation
+d= -1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
 #rho_2 = (e*(3+2*eta**2) * d) /(3-eta**2)*rho_1 * np.cos(alpha) # [m]  - along-track separation for bounded symmnetic deputy motion in along track direction
 
@@ -281,7 +281,7 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
 n_revol_T = 1*60*60/Torb
-n_revolution= 2 #n_revol_T #n_revol_T
+n_revolution= 10 #n_revol_T #n_revol_T
 T_total=n_revolution*Torb
 print("Orbital period",Torb, "Number of orbits",n_revol_T)
 
@@ -337,6 +337,7 @@ print("Integration done....")
 print("time",teval.shape,teval[0],teval[-1])
 print("sol_y",sol_y.shape)
 state_vector_function = StateVectorInterpolator(teval, sol_y)
+#control_vector_function = StateVectorInterpolator(teval, uu_log)
 
 print("Interpolating function created successfully.")
 
@@ -409,6 +410,36 @@ Y_Earth = r_Earth * numpy.sin(phi) * numpy.sin(theta)
 Z_Earth = r_Earth * numpy.cos(theta)
 
 # draw the unit vectors of the ECI frame on the 3d plot of earth
+scaling_state = [r_Earth]*16
+
+for i in range(len(scaling_state)):
+    if i == 0:
+        scaling_state[i] = 1
+    if i == 6:
+        scaling_state[i] = 1
+
+    scaling_state[i] = r_Earth
+
+T = numpy.diag([scaling_state])  # Transformation matrix
+S = numpy.diag([23e-5, 23-5])  # control scaling
+
+data['T']  = T
+data['S']  = S
+
+
+d_KOZ = 0.3
+
+# Generate spherical coordinates
+theta = np.linspace(0, 2 * np.pi, 50)  # Azimuthal angle
+phi = np.linspace(0, np.pi, 50)        # Polar angle
+theta, phi = np.meshgrid(theta, phi)
+
+# Convert spherical to Cartesian coordinates
+x = d_KOZ * np.sin(phi) * np.cos(theta)
+y = d_KOZ * np.sin(phi) * np.sin(theta)
+z = d_KOZ * np.cos(phi)
+
+
 
 
 
@@ -460,6 +491,7 @@ ax1 = fig.add_subplot(121, projection='3d')
 
 # Plot the trajectory in 3D space
 line, = ax1.plot3D(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
+ax1.plot_surface(x, y, z, color='c', edgecolor='k', alpha=0.6)
 
 # Draw reference frame arrows (LVLH) on the interactive plot
 arrow_length = 0.1  # Adjust this factor to change the relative size of arrows
@@ -529,7 +561,7 @@ ax = fig.add_subplot(111, projection='3d')
 
 # Plot the 3D trajectory
 ax.plot(rr_s[0], rr_s[1], rr_s[2], 'black', linewidth=2, alpha=1)
-
+ax.plot_surface(x, y, z, color='c', edgecolor='k', alpha=0.6)
 
 # Plot the initial, midpoint, and final points
 ax.plot(rr_s[0, 0], rr_s[1, 0], rr_s[2, 0], 'ko', linewidth=2, alpha=1, label='Start Point')  # Starting point
@@ -639,6 +671,18 @@ axs[2].plot(teval, angle_con_array)
 axs[2].set_title('Constrains angle')
 
 
+fig, axs = plt.subplots(2, 1)
+
+# Plot data on the first subplot
+axs[0].plot(teval, sol_y[14])
+axs[0].set_title('Chief yaw rate')
+
+# Plot data on the second subplot
+axs[1].plot(teval, sol_y[15])
+axs[1].set_title('Deputy 1 yaw rate')
+
+
+
 # After integration
 uu_log1 = np.array(uu_log)  # Convert to numpy array
 uu_log2 =np.array(uu_deputy)  # Convert to numpy array
@@ -646,6 +690,16 @@ uu_log2 =np.array(uu_deputy)  # Convert to numpy array
 u_chief = uu_log1[:, 0]  # Chief input torque
 u_deputy = uu_log1[:, 1]  # Deputy input torque
 u_deputy1 = uu_log1[:, 2]  # Deputy
+
+
+control_vector_function = StateVectorInterpolator(teval, uu_log1[:,0:2])
+
+print("Interpolating function created successfully.")
+
+
+# # Save the function using pickle
+with open('control_vector_function.pkl', 'wb') as f:
+    pickle.dump(control_vector_function, f)
 
 # Check the shape of uu_log (it should be Nx2, where N is the number of time steps)
 print(f"uu_log shape: {uu_log1.shape}")

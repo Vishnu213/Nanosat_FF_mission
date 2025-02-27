@@ -126,10 +126,10 @@ def half_half_curve(t, Torb, high_value, low_value, transition_fraction=0, total
     t_mod = np.mod(t, total_period)
 
     # Determine the mid-point of each orbital period
-    mid_period = total_period
+    mid_period = 0.5*total_period
     transition_time = transition_fraction * Torb
 
-    if t > mid_period:
+    if t_mod > mid_period:
         curve = low_value
     else:
         curve = high_value
@@ -173,8 +173,8 @@ def yaw_dynamics(t, yy, param, uu):
     control_max = 23e-6
 
     # Custom wave applied to control yaw angle (90 degrees to 0 degrees with smooth transitions)
-    wave_output = half_half_curve(t, T, 0, 90*np.pi / 180, transition_fraction=0.1, total_orbits=1)
-    wave_output_1 = half_half_curve(t, T, 90*np.pi / 180,0, transition_fraction=0.1, total_orbits=1)
+    wave_output = half_half_curve(t, T, 0, 45*np.pi / 180, transition_fraction=0.1, total_orbits=5)
+    wave_output_1 = half_half_curve(t, T, 90*np.pi / 180,30*np.pi / 180, transition_fraction=0.1, total_orbits=5)
     
     # PID control law for the chief satellite
     e_current = wave_output - yy[12]  # Current error for chief
@@ -201,8 +201,12 @@ def yaw_dynamics(t, yy, param, uu):
     y_dynamics[3] = (1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
 
     if y_dynamics[0] <0 or y_dynamics[1] <0:
-        print("YAW RATE NEGATIVE")
-        
+        #print("YAW NEGATIVE")
+        pass
+
+    uu_ind = [control_input, control_input_1, control_input_clipped]
+    uu_log.append(uu_ind)
+    uu_ind = []
 
 
     # Uncomment to print control inputs and time for debugging
@@ -393,9 +397,9 @@ def Dynamics(t, yy, param,uu):
     # calculate the differential aerodynamic forces
     u =  u_deputy - u_c
 
-    uu_ind.append(u)
-    uu_log.append(uu_ind)
-    uu_ind = []
+    # uu_ind.append(u)
+    # uu_log.append(uu_ind)
+    # uu_ind = []
     # uu_deputy.append(u)
     # print("u _differential",u)
     #print("u_c",u_c)
