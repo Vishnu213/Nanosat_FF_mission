@@ -390,6 +390,8 @@ def Dynamics(t, yy_in, param,uu):
 
     global uu_ind, uu_log, uu_deputy
     
+    print("time",t, "yy_scaled",yy_in)
+    print("time",t, "yy_unscaled",yy_in)
     
     T = param["T"]
     S = param["S"]
