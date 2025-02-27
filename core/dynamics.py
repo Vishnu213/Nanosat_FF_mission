@@ -184,9 +184,18 @@ def yaw_dynamics(t, yy, param, uu):
     # Clip the control input for chief to the specified range
     control_input_clipped = np.clip(control_input, control_min, control_max)
 
+    T = param["T"]
+    S = param["S"]
+
     # Chief satellite yaw dynamics
+    # y_dynamics[0] = T[12,12] *y_dot_c  # Derivative of yaw angle (yaw rate) for chief
+    # y_dynamics[2] = T[14,14] * (1/S[0,0])*(1/Izc) * control_input     # Derivative of yaw rate (angular acceleration) for chief
+
+
     y_dynamics[0] = y_dot_c  # Derivative of yaw angle (yaw rate) for chief
     y_dynamics[2] = (1/Izc) * control_input     # Derivative of yaw rate (angular acceleration) for chief
+
+
 
     # PID control law for the deputy satellite
     e_current_1 = wave_output_1 - yy[13]  # Current error for deputy
@@ -196,17 +205,24 @@ def yaw_dynamics(t, yy, param, uu):
     # Clip the control input for deputy to the specified range
     control_input_1_clipped = np.clip(control_input_1, control_min, control_max)
 
+
+
     # Deputy satellite yaw dynamics
+    # y_dynamics[1] = T[13,13]* y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
+    # y_dynamics[3] = T[15,15] * (1/S[1,1])(1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
+
     y_dynamics[1] = y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
     y_dynamics[3] = (1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
+
+
 
     if y_dynamics[0] <0 or y_dynamics[1] <0:
         #print("YAW NEGATIVE")
         pass
 
-    uu_ind = [control_input, control_input_1, control_input_clipped]
-    uu_log.append(uu_ind)
-    uu_ind = []
+    # uu_ind = [control_input, control_input_1, control_input_clipped]
+    # uu_log.append(uu_ind)
+    # uu_ind = []
 
 
     # Uncomment to print control inputs and time for debugging
@@ -330,15 +346,23 @@ def absolute_NSROE_dynamics(t, yy, param,yy_o):
     uu_ind.append(u_chief)
     # print("u_ind",uu_ind)
     # print("u_chief-----",u_chief)
- 
+     
+    T = param["T"]
+    S = param["S"]
+    S_inv = np.diag([1/S[0,0],1/S[1,1]])
     # u_chief = numpy.zeros((3))
     # u_chief = 0*np.array([1e-6,1e-6,0.01e-6])
-    y_dot = A + numpy.matmul(B, u_chief)
+    y_dot = A + numpy.matmul(B,u_chief)
+    #y_dot = numpy.matmul(T[:6,:6],A) + numpy.matmul(T[:6,:6],numpy.matmul(B, numpy.matmult(S_inv,u_chief)))
+
 
     return y_dot, u_chief
 
 def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
     global uu_ind, uu_log
+
+
+
     A = lagrage_J2_diff(t, yy, param)
     B = guess_nonsingular_Bmat(t, yy, param) # yy_o[12:14]
     #print("B",B)
@@ -361,8 +385,19 @@ def absolute_NSROE_dynamics_N(t, yy, param,yy_o):
 
 
 
-def Dynamics(t, yy, param,uu):
+def Dynamics(t, yy_in, param,uu):
+
+
     global uu_ind, uu_log, uu_deputy
+    
+    
+    T = param["T"]
+    S = param["S"]
+    T_inv = param["T_inv"]
+    S_inv = np.diag([1/S[0,0],1/S[1,1]])
+
+    yy = np.matmul(T_inv, yy_in)
+
     start_idx = 0
     chief_state = yy[6:12]
     y_dot_chief, u_c = absolute_NSROE_dynamics(t, chief_state, param,yy)
@@ -397,9 +432,9 @@ def Dynamics(t, yy, param,uu):
     # calculate the differential aerodynamic forces
     u =  u_deputy - u_c
 
-    # uu_ind.append(u)
-    # uu_log.append(uu_ind)
-    # uu_ind = []
+    uu_ind.append(u)
+    uu_log.append(uu_ind)
+    uu_ind = []
     # uu_deputy.append(u)
     # print("u _differential",u)
     #print("u_c",u_c)
@@ -411,9 +446,13 @@ def Dynamics(t, yy, param,uu):
     #print("u",u.shape)
     #print("delta_NSROE",delta_NSROE.shape)
     # u = np.array([1e-6,1e-6,0.01e-6])
-    y_dot_deputy = numpy.matmul(A_deputy, delta_NSROE) + numpy.matmul(B_deputy, u)
+     
 
-    
+    #y_dot_deputy = numpy.matmul(numpy.matmul(T[6:12,6:12],A_deputy), delta_NSROE) + numpy.matmul(T[6:12,6:12],numpy.matmul(B_deputy, numpy.matmult(S_inv,u)))
+
+    y_dot_deputy = numpy.matmul(A_deputy, delta_NSROE) + numpy.matmul(B_deputy,u)
+
+
     y_dot_yaw = yaw_dynamics(t, yy, param,uu)
     
 

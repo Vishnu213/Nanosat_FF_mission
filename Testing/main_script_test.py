@@ -272,10 +272,36 @@ print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
 print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
 
+# draw the unit vectors of the ECI frame on the 3d plot of earth
+scaling_state = [6375]*16
+scaling_state_inv = [1/6375]*16
+
+for i in range(len(scaling_state)):
+    if i == 0:
+        scaling_state[i] = 1
+        scaling_state_inv[i] = 1
+    elif i == 6:
+        scaling_state[i] = 1
+        scaling_state_inv[i] = 1
+    else:
+        scaling_state[i] = 6375.0
+        scaling_state_inv[i] = 1/6375.0
+
+    
+
+T = numpy.diag(scaling_state)  # Transformation matrix
+S = numpy.diag([23e-5, 23-5])  # control scaling
+T_inv = numpy.diag(scaling_state_inv)  # Inverse transformation matrix
+
+data['T']  = T
+data['S']  = S
+data['T_inv']  = T_inv
+
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
 # [6x1,6x1,4x1]
-yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
+yy_o_unscaled=numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
+yy_o = numpy.dot(T,yy_o_unscaled)
 
 # test for gauess equation
 mu=data["Primary"][0]
@@ -300,6 +326,9 @@ print("Time of Integration",T_total)
 print("integration time step",teval[1]-teval[0])
 print("Number of data points",len(teval))
 print("Integration starting....")
+
+
+
 
 # Start the timer
 start_time = time.time()
@@ -326,7 +355,7 @@ execution_time = end_time - start_time
 
 # teval = t_values
 
-sol_y = sol.y
+sol_y = np.dot(T_inv,sol.y) 
 
 teval = sol.t
 
@@ -409,22 +438,7 @@ X_Earth = r_Earth * numpy.cos(phi) * numpy.sin(theta)
 Y_Earth = r_Earth * numpy.sin(phi) * numpy.sin(theta)
 Z_Earth = r_Earth * numpy.cos(theta)
 
-# draw the unit vectors of the ECI frame on the 3d plot of earth
-scaling_state = [r_Earth]*16
 
-for i in range(len(scaling_state)):
-    if i == 0:
-        scaling_state[i] = 1
-    if i == 6:
-        scaling_state[i] = 1
-
-    scaling_state[i] = r_Earth
-
-T = numpy.diag([scaling_state])  # Transformation matrix
-S = numpy.diag([23e-5, 23-5])  # control scaling
-
-data['T']  = T
-data['S']  = S
 
 
 d_KOZ = 0.3
@@ -692,14 +706,14 @@ u_deputy = uu_log1[:, 1]  # Deputy input torque
 u_deputy1 = uu_log1[:, 2]  # Deputy
 
 
-control_vector_function = StateVectorInterpolator(teval, uu_log1[:,0:2])
+# control_vector_function = StateVectorInterpolator(teval, uu_log1[:,0:2])
 
-print("Interpolating function created successfully.")
+# print("Interpolating function created successfully.")
 
 
-# # Save the function using pickle
-with open('control_vector_function.pkl', 'wb') as f:
-    pickle.dump(control_vector_function, f)
+# # # Save the function using pickle
+# with open('control_vector_function.pkl', 'wb') as f:
+#     pickle.dump(control_vector_function, f)
 
 # Check the shape of uu_log (it should be Nx2, where N is the number of time steps)
 print(f"uu_log shape: {uu_log1.shape}")
@@ -713,16 +727,16 @@ print(f"uu_log shape: {uu_log1.shape}")
 # plt.title('Evolution of uu over time')
 # plt.legend()
 
-print("uu_log1",np.linalg.norm(uu_log1[:, 0]))
-# Plotting the results for both components of uu
-plt.figure()
-plt.plot(np.linalg.norm(uu_log1[:,0], axis=1), label='Chief force')  # First column
-plt.plot(np.linalg.norm(uu_log1[:, 1], axis=1), label='deputy force')  # First column
-plt.plot(np.linalg.norm(uu_log1[:, 2], axis=1), label='diff force')  # First column
-plt.xlabel('Time (s)')
-plt.ylabel('Force in N (uu)')
-plt.title('Evolution of uu over time')
-plt.legend()
+# print("uu_log1",np.linalg.norm(uu_log1[:, 0]))
+# # Plotting the results for both components of uu
+# plt.figure()
+# plt.plot(np.linalg.norm(uu_log1[:,0], axis=1), label='Chief force')  # First column
+# plt.plot(np.linalg.norm(uu_log1[:, 1], axis=1), label='deputy force')  # First column
+# plt.plot(np.linalg.norm(uu_log1[:, 2], axis=1), label='diff force')  # First column
+# plt.xlabel('Time (s)')
+# plt.ylabel('Force in N (uu)')
+# plt.title('Evolution of uu over time')
+# plt.legend()
 
 plt.show()
 
