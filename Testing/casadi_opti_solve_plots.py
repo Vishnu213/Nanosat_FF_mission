@@ -171,7 +171,7 @@ rho_3 =1 # [m]  - cross-track separation
 alpha = 0*45* deg2rad#180 * deg2rad  # [rad] - angle between the radial and along-track separation
 beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
 vd = 0.000 #-10 # Drift per revolutions m/resolution
-d= -1.5 # [m] - along track separation
+d= -1# [m] - along track separation
 rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
 #rho_2 = (e*(3+2*eta**2) * d) /(3-eta**2)*rho_1 * np.cos(alpha) # [m]  - along-track separation for bounded symmnetic deputy motion in along track direction
 
@@ -180,7 +180,6 @@ print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
 parameters=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
 
 print("Formation parameters",parameters)
-
 
 
 
@@ -276,57 +275,6 @@ print("Chief orbital elements",NOE_chief)
 print("RELATIVE ORBITAL ELEMTNS INITIAL", RNOE_0)
 print("CHIEF INTIIAL ORBITAL ELEMENTS", NOE_chief)
 
-##### target parameters
-
-# Design parameters for the formation - Sengupta and Vadali 2007 Relative Motion and the Geometry of Formations in Keplerian Elliptic Orbits
-
-rho_1 = 1 # [m]  - radial separation
-rho_3 =1 # [m]  - cross-track separation
-alpha = 0*45* deg2rad#180 * deg2rad  # [rad] - angle between the radial and along-track separation
-beta = alpha + 90 * deg2rad # [rad] - angle between the radial and cross-track separation
-vd = 0.000 #-10 # Drift per revolutions m/resolution
-d= -3 # [m] - along track separation
-rho_2 = (2*(eta**2) * d) /(3-eta**2) # [m]  - along-track separation
-#rho_2 = (e*(3+2*eta**2) * d) /(3-eta**2)*rho_1 * np.cos(alpha) # [m]  - along-track separation for bounded symmnetic deputy motion in along track direction
-
-print("RHO_2",rho_2)
-print(d/1+e, d/1-e,  d*(1/(2*(eta**2)) /(3-eta**2)))
-parameters_targetr=numpy.array([rho_1,rho_2,rho_3,alpha,beta,vd])
-
-print("Formation parameters",parameters)
-
-
-
-# Initial relative orbital elements
-RNOE_0_target=Param2NROE(NOE_chief, parameters_targetr,param)
-
-
-
-# Initial relative orbital elements
-
-# Relative Orbital Elements
-# relative_orbital_elements_target = np.array([
-#     -0.00000000e+00, -1.67303490e-04, 9.00565644e-21, 8.33333453e-07,
-#     -1.48502199e-04, -1.48212803e-04
-# ])
-
-relative_orbital_elements_target = RNOE_0_target
-
-# Chief Initial Orbital Elements
-chief_initial_orbital_elements_target = np.array([
-    6.80000000e+03, 1.00000000e-01, 1.69486568e+00, 8.66025404e-03,
-    5.00000000e-03, 1.74532925e-01
-])
-
-# Additional Parameters
-yaw_target = np.array([
-    0.0, 1.57079633, 0.0, 0.0
-])
-
-state_target = np.concatenate((relative_orbital_elements_target,chief_initial_orbital_elements_target,yaw_target), axis=0)
-
-
-print("State target ",state_target, state_target.shape)
 
 
 
@@ -356,12 +304,6 @@ param['S']  = S
 param['T_inv']  = T_inv
 param['S_inv']  = S_inv
 
-T_value = np.diag(scaling_state)
-T_inv_value = np.diag(scaling_state_inv)
-S_value = np.diag([23e5, 235])
-S_inv_value = np.diag([1/23e5, 1/23e5])
-
-
 
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
 # [6x1,6x1,4x1]
@@ -369,7 +311,7 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
 # Test for Gauss equation
 mu = param["Primary"][0]
-N_points = 30
+N_points = 10
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
 n_revolution =10 # n_revol_T
@@ -402,13 +344,6 @@ print("State vector interpolator loaded.")
 print("size of yy_ref",yy_ref.shape)
 print("size of l_colm",l_colm.shape)
 print("control vector reference shapre.",uu_ref.shape)
-
-
-## state vector
-print("T_inv",T_inv_value)
-print("state_target",state_target)
-
-x_d = NSROE2LVLH(state_target[:6], state_target[6:12], param)
 
 
 
@@ -551,183 +486,179 @@ def rk4_step(f, t, x, u, dt, param):
 # #     y_next = y + 16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6
 # #     return y_next
 
-control_cost = 0
-objective2 = 0
-print("T",T)
+# control_cost = 0
+# objective2 = 0
+# print("T",T)
 
-# Collocation constraints using RK5 for the state and dynamics
-dt = T_total / N
-for k in range(N):
-    xk = X[:, k]       # State at step k
-    uk = U[:, k]       # Control at step k
-    x_next = X[:, k+1]  # State at step k+1
+# # Collocation constraints using RK5 for the state and dynamics
+# dt = T_total / N
+# for k in range(N):
+#     xk = X[:, k]       # State at step k
+#     uk = U[:, k]       # Control at step k
+#     x_next = X[:, k+1]  # State at step k+1
 
-    t_k = t[k]  # Current time step (optimized)
+#     t_k = t[k]  # Current time step (optimized)
 
-    # result = integrator(x0=xk, p=ca.vertcat(uk, t_k))
-    # x_next_pred = result['xf']
+#     # result = integrator(x0=xk, p=ca.vertcat(uk, t_k))
+#     # x_next_pred = result['xf']
 
-    x_next_pred = rk4_step(Dynamics_casadi, t_k, xk, uk, dt, param)
+#     x_next_pred = rk4_step(Dynamics_casadi, t_k, xk, uk, dt, param)
 
-    # Objective: Minimize the semi-major axis of the chief
-    epsilon = 1e-7
-    control_cost = control_cost + epsilon * ca.sumsqr(uk)
-
-
-    objective2 = objective2 + con_chief_deputy_angle_casadi(ca.mtimes(T_inv,xk), param)**2 # Second objective
+#     # Objective: Minimize the semi-major axis of the chief
+#     epsilon = 1e-7
+#     control_cost = control_cost + epsilon * ca.sumsqr(uk)
 
 
+#     objective2 = objective2 + con_chief_deputy_angle_casadi(ca.mtimes(T_inv,xk), param)**2 # Second objective
 
 
 
-    # Add the collocation constraint (RK5-based prediction should match the next state)
-    opti.subject_to(x_next == x_next_pred)
-    # opti.subject_to(t[k + 1] == t[k] + dt)  # Time evolution constraint
-
-    # # Calculate the relative position `r` between chief and deputy in LVLH frame
-    r = ca.norm_2(NSROE2LVLH_casadi(ca.mtimes(T_inv[:6,:6],xk[0:6]), ca.mtimes(T_inv[6:12,6:12],xk[6:12]), param))
-
-    # # Inequality Constraints: Position and Collision Avoidance
-
-    # opti.subject_to(r >= r0-0.5)  # Lower bound constraint
-    opti.subject_to(r**2 <= (r0+3)**2)  # Upper bound
-    opti.subject_to(d_koz**2 < r**2)   # Collision avoidance
-
-    # Dynamics derivative (dx/dt)
-    dx_dt = Dynamics_casadi(t_k, xk, param, uk)
-
-    # # # Constraint: Yaw rate limits for chief and deputy (dx/dt[12] and dx/dt[13])
-    # opti.subject_to(dx_dt[14] >= param["PHI_DOT"][0])
-    # opti.subject_to(dx_dt[14] <= param["PHI_DOT"][1])
-    # opti.subject_to(dx_dt[15] >= param["PHI_DOT"][0])
-    # opti.subject_to(dx_dt[15] <= param["PHI_DOT"][1])
-
-    # # # # # Constraint: Yaw angle limits for chief and deputy (x[12] and x[13])
-    # opti.subject_to(xk[12] >= param["PHI"][0])
-    # opti.subject_to(xk[12] <= param["PHI"][1])
-    # opti.subject_to(xk[13] >= param["PHI"][0])
-    # opti.subject_to(xk[13] <= param["PHI"][1])
-
-    # # # Control input constraints (torque limits)
-    # opti.subject_to(uk[0] >= param["T_MAX"][0])  # Chief torque lower bound
-    # opti.subject_to(uk[0] <= param["T_MAX"][1])  # Chief torque upper bound
-    # opti.subject_to(uk[1] >= param["T_MAX"][0])  # Deputy torque lower bound
-    # opti.subject_to(uk[1] <= param["T_MAX"][1])  # Deputy torque upper bound
 
 
-    # # Yaw rate limits (vectorized)
-    # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) >= param["PHI_DOT"][0])  # Lower bound
-    # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) <= param["PHI_DOT"][1])  # Upper bound
+#     # Add the collocation constraint (RK5-based prediction should match the next state)
+#     opti.subject_to(x_next == x_next_pred)
+#     # opti.subject_to(t[k + 1] == t[k] + dt)  # Time evolution constraint
 
-    # # # Yaw angle limits (vectorized)
-    # # opti.subject_to(xk[12:14] >= param["PHI"][0])  # Lower bound
-    # # opti.subject_to(xk[12:14] <= param["PHI"][1])  # Upper bound
+#     # # Calculate the relative position `r` between chief and deputy in LVLH frame
+#     r = ca.norm_2(NSROE2LVLH_casadi(ca.mtimes(T_inv[:6,:6],xk[0:6]), ca.mtimes(T_inv[6:12,6:12],xk[6:12]), param))
 
-    # # Control input constraints (vectorized)
-    # opti.subject_to(ca.mtimes(S_inv[0,0],uk) >= param["T_MAX"][0])  # Lower bound
-    # opti.subject_to(ca.mtimes(S_inv[1,1],uk) <= param["T_MAX"][1])  # Upper bound
+#     # # Inequality Constraints: Position and Collision Avoidance
 
-    # opti.subject_to(t[0] == 0)  # Initial time condition
-    # opti.subject_to(t[-1] == T_total)  # Final time condition
+#     # opti.subject_to(r >= r0-0.5)  # Lower bound constraint
+#     opti.subject_to(r**2 <= (r0+3)**2)  # Upper bound
+#     opti.subject_to(d_koz**2 < r**2)   # Collision avoidance
 
-    # # phi_deputy = con_chief_deputy_vec(xk, param)
-    # # opti.subject_to(phi_deputy - xk[13] <= 0.1)
+#     # Dynamics derivative (dx/dt)
+#     dx_dt = Dynamics_casadi(t_k, xk, param, uk)
 
-# # Initial condition constraints
-# opti.subject_to(X[:, 0] == yy_o)
+#     # # # Constraint: Yaw rate limits for chief and deputy (dx/dt[12] and dx/dt[13])
+#     # opti.subject_to(dx_dt[14] >= param["PHI_DOT"][0])
+#     # opti.subject_to(dx_dt[14] <= param["PHI_DOT"][1])
+#     # opti.subject_to(dx_dt[15] >= param["PHI_DOT"][0])
+#     # opti.subject_to(dx_dt[15] <= param["PHI_DOT"][1])
 
+#     # # # # # Constraint: Yaw angle limits for chief and deputy (x[12] and x[13])
+#     # opti.subject_to(xk[12] >= param["PHI"][0])
+#     # opti.subject_to(xk[12] <= param["PHI"][1])
+#     # opti.subject_to(xk[13] >= param["PHI"][0])
+#     # opti.subject_to(xk[13] <= param["PHI"][1])
 
-print("size of yy_ref",yy_ref.shape)
-print("size of l_colm",l_colm.shape)
-print("concatenated",np.concatenate((yy_ref,l_colm),axis =1).shape)
-print("multiple",np.dot(T,np.concatenate((yy_ref,l_colm),axis =1)).shape)
-
-# yy_init = np.dot(T,np.concatenate((yy_ref,l_colm)))
-# Set initial guesses for the optimization problem
-opti.set_initial(X,np.concatenate((yy_ref,l_colm),axis =1))
-opti.set_initial(U, uu_ref)
-
-# Define the weights
-weight1 = 1  # Weight for the first objective
-weight2 = 1 # Weight for the second objective
-# Define the two objective functions
-objective1 = -X[6, -1]  # Original objective
+#     # # # Control input constraints (torque limits)
+#     # opti.subject_to(uk[0] >= param["T_MAX"][0])  # Chief torque lower bound
+#     # opti.subject_to(uk[0] <= param["T_MAX"][1])  # Chief torque upper bound
+#     # opti.subject_to(uk[1] >= param["T_MAX"][0])  # Deputy torque lower bound
+#     # opti.subject_to(uk[1] <= param["T_MAX"][1])  # Deputy torque upper bound
 
 
+#     # # Yaw rate limits (vectorized)
+#     # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) >= param["PHI_DOT"][0])  # Lower bound
+#     # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) <= param["PHI_DOT"][1])  # Upper bound
+
+#     # # # Yaw angle limits (vectorized)
+#     # # opti.subject_to(xk[12:14] >= param["PHI"][0])  # Lower bound
+#     # # opti.subject_to(xk[12:14] <= param["PHI"][1])  # Upper bound
+
+#     # # Control input constraints (vectorized)
+#     # opti.subject_to(ca.mtimes(S_inv[0,0],uk) >= param["T_MAX"][0])  # Lower bound
+#     # opti.subject_to(ca.mtimes(S_inv[1,1],uk) <= param["T_MAX"][1])  # Upper bound
+
+#     # opti.subject_to(t[0] == 0)  # Initial time condition
+#     # opti.subject_to(t[-1] == T_total)  # Final time condition
+
+#     # # phi_deputy = con_chief_deputy_vec(xk, param)
+#     # # opti.subject_to(phi_deputy - xk[13] <= 0.1)
+
+# # # Initial condition constraints
+# # opti.subject_to(X[:, 0] == yy_o)
+
+
+# print("size of yy_ref",yy_ref.shape)
+# print("size of l_colm",l_colm.shape)
+# print("concatenated",np.concatenate((yy_ref,l_colm),axis =1).shape)
+# print("multiple",np.dot(T,np.concatenate((yy_ref,l_colm),axis =1)).shape)
+
+# # yy_init = np.dot(T,np.concatenate((yy_ref,l_colm)))
+# # Set initial guesses for the optimization problem
+# opti.set_initial(X,np.concatenate((yy_ref,l_colm),axis =1))
+# opti.set_initial(U, uu_ref)
+
+# # Define the weights
+# weight1 = 0.4  # Weight for the first objective
+# weight2 = 0.6 # Weight for the second objective
+# # Define the two objective functions
+# objective1 = -X[6, -1]  # Original objective
+
+# x_d = np.array([0,0,0])
 
 # x_f = NSROE2LVLH_casadi(ca.mtimes(T_inv[:6,:6],X[0:6,-1]), ca.mtimes(T_inv[6:12,6:12],X[6:12,-1]), param)
 
 # objective3 = (x_f[0]**2 + x_f[1]**2 + x_f[2]**2 - x_d[0]**2 - x_d[1]**2 - x_d[2]**2)
+# # Combine the objective functions with weights
+# combined_objective = objective3**2 #weight2 * objective2 #+   epsilon * control_cost , weight1 * objective1 # + 
 
-objective3 = ca.sum1(X[:6,-1] - np.matmul(T,state_target)[:6])**2 
-
-# Combine the objective functions with weights
-combined_objective = weight1 * objective3 #+ weight2 * objective1 #weight2 * objective2 #+   epsilon * control_cost , weight1 * objective1 # + 
-
-opti.minimize(combined_objective)
+# opti.minimize(combined_objective)
 
 
-# Check parameters
-print("Parameters:", param)
+# # Check parameters
+# print("Parameters:", param)
 
-# opti.set_initial(X, ca.DM.zeros(X.shape))
-# opti.set_initial(U, ca.DM.zeros(U.shape))
+# # opti.set_initial(X, ca.DM.zeros(X.shape))
+# # opti.set_initial(U, ca.DM.zeros(U.shape))
 
-# Solver options
+# # Solver options
 
-print("Optimization problem set up...")
-opti.solver('ipopt', {
-    'ipopt.print_level': 5,  # Detailed output
-    'ipopt.sb': 'yes',       # Suppress the banner
-    # 'ipopt.max_iter': 100,     # Limit iterations for debugging
-    'expand': True,
-    # 'ipopt.print_level': 4,  # Detailed print level
-    # 'ipopt.max_iter': N_points,  # Max iterations
-    'ipopt.tol': 1e-7,  # Convergence tolerance
-    # 'print_time': True,  # Print computation time
-    # # 'ipopt.sb': 'yes',  # Show solver's internal message
-    # 'ipopt.jacobian_approximation': 'finite-difference-values',  # Use finite differences for Jacobian
+# print("Optimization problem set up...")
+# opti.solver('ipopt', {
+#     'ipopt.print_level': 5,  # Detailed output
+#     'ipopt.sb': 'yes',       # Suppress the banner
+#     # 'ipopt.max_iter': 100,     # Limit iterations for debugging
+#     'expand': True,
+#     # 'ipopt.print_level': 4,  # Detailed print level
+#     # 'ipopt.max_iter': N_points,  # Max iterations
+#     'ipopt.tol': 1e-7,  # Convergence tolerance
+#     # 'print_time': True,  # Print computation time
+#     # # 'ipopt.sb': 'yes',  # Show solver's internal message
+#     # 'ipopt.jacobian_approximation': 'finite-difference-values',  # Use finite differences for Jacobian
 
-})
-print("Solver options set.")
-print("Solving the problem...")
+# })
+# print("Solver options set.")
+# print("Solving the problem...")
 
-# Solve the problem
+# # Solve the problem
 
-# # Check initial guess for decision variables
+# # # Check initial guess for decision variables
+# # print("Initial X:", opti.debug.value(X))
+# # print("Initial U:", opti.debug.value(U))
+# sol = opti.solve()
+
 # print("Initial X:", opti.debug.value(X))
 # print("Initial U:", opti.debug.value(U))
-sol = opti.solve()
 
-print("Initial X:", opti.debug.value(X))
-print("Initial U:", opti.debug.value(U))
+# # Check solver status
+# if opti.stats()['success']:
 
-# Check solver status
-if opti.stats()['success']:
+#     # Record the end time
+#     end_time = time.time()
 
-    # Record the end time
-    end_time = time.time()
+#     # Calculate the duration
+#     duration = end_time - start_time
+#     print(f"Time taken to solve the problem: {duration:.2f} seconds")
 
-    # Calculate the duration
-    duration = end_time - start_time
-    print(f"Time taken to solve the problem: {duration:.2f} seconds")
+#     print("Solver was successful.")
+#     # # Extract solution
+#     solution_x = sol.value(X)
+#     solution_u = sol.value(U)
+#     np.save("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy",solution_x)
+#     np.save("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy",solution_u )
+# else:
+#     # Record the end time
+#     end_time = time.time()
 
-    print("Solver was successful.")
-    # # Extract solution
-    solution_x = sol.value(X)
-    solution_u = sol.value(U)
-    
-    np.save("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy",solution_x)
-    np.save("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy",solution_u )
-else:
-    # Record the end time
-    end_time = time.time()
+#     # Calculate the duration
+#     duration = end_time - start_time
+#     print(f"Time taken to solve the problem: {duration:.2f} seconds")
 
-    # Calculate the duration
-    duration = end_time - start_time
-    print(f"Time taken to solve the problem: {duration:.2f} seconds")
-
-    print("Solver failed to find a solution.")
+#     print("Solver failed to find a solution.")
     
 
 #     # print("Solution extracted.")
@@ -751,121 +682,123 @@ else:
 
 ##################################
 
-# solution_x = np.load("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy.npy")
-# solution_u = np.load("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy.npy")
+if __name__ == "__main__":
 
-# # # pplot control inputs
-# # print(max(solution_u[1, :]))
-# # print(min(solution_u[1, :]))
+    solution_x = np.load("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy")
+    solution_u = np.load("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy")
 
-# # Ensure solution_x and solution_u are defined
-# if solution_x is not None and solution_u is not None:
-#     # Plotting the results
-#     time_grid = np.linspace(0, T, N + 1)
+    # # pplot control inputs
+    # print(max(solution_u[1, :]))
+    # print(min(solution_u[1, :]))
 
-
-#     # Plot semi-major axis of the chief
-#     plt.figure()
-#     plt.plot(time_grid, solution_x[6, :], label='Chief semi-major axis')
-#     plt.xlabel('Time (s)')
-#     plt.ylabel('Semi-major axis')
-#     plt.title('Semi-major axis over time')
-#     plt.legend()
-
-#     # Plot yaw angles
-#     plt.figure()
-#     plt.plot(time_grid, solution_x[12, :], label='Chief yaw angle')
-#     plt.plot(time_grid, solution_x[13, :], label='Deputy yaw angle')
-#     plt.xlabel('Time (s)')
-#     plt.ylabel('Yaw angle')
-#     plt.title('Yaw angles over time')
-#     plt.legend()
-
-#     rr_s = np.zeros((3, len(solution_x[12, :])))
-#     angle_con_array = numpy.zeros(len(solution_x[12,:]))
-#     # For each time step, compute the position
-#     for i in range(len(solution_x[12, :])):
-#         yy1 = solution_x[0:6, i]  # Deputy NSROE
-#         yy2 = solution_x[6:12, i]  # Chief NSROE
-#         rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
-#         angle_con_array[i] = con_chief_deputy_angle(solution_x[:,i], param)
-
-#     # Plot the LVLH frame trajectory in 3D
-#     fig = plt.figure(figsize=(12, 6))
-#     ax1 = fig.add_subplot(121, projection='3d')
-#     ax1.plot3D(rr_s[0, :], rr_s[1, :], rr_s[2, :], 'black', linewidth=2, alpha=1, label='Deputy 1')
-#     ax1.set_xlabel('x (km)')
-#     ax1.set_ylabel('y (km)')
-#     ax1.set_zlabel('z (km)')
-#     ax1.set_title('LVLH frame - Deputy Spacecraft (Interactive)')
-#     ax1.legend(loc='best')
-
-#     # Plot the constraints angle over time
-#     fig, axs = plt.subplots(3, 1)
-#     axs[0].plot(time_grid, solution_x[0, :])
-#     axs[0].set_title('x')
-
-#     axs[1].plot(time_grid, solution_x[1, :])
-#     axs[1].set_title('y')
-
-#     axs[2].plot(time_grid, solution_x[2, :])
-#     axs[2].set_title('z')
-
-#     # Plot semi-major axis, mean true latitude, inclination
-#     fig, axs = plt.subplots(3, 1)
-#     axs[0].plot(time_grid, solution_x[0, :], label='semi-major axis')
-#     axs[1].plot(time_grid, solution_x[1, :], label='mean true latitude')
-#     axs[2].plot(time_grid, solution_x[2, :], label='inclination')
-
-#     axs[0].set_title('Semi-major axis')
-#     axs[1].set_title('Mean true latitude')
-#     axs[2].set_title('Inclination')
-
-#     plt.tight_layout()
-#     plt.show()
-
-#     # Plot q1, q2, right ascension of ascending node over time
-#     fig, axs = plt.subplots(3, 1)
-#     axs[0].plot(time_grid, solution_x[3, :], label='q1')
-#     axs[1].plot(time_grid, solution_x[4, :], label='q2')
-#     axs[2].plot(time_grid, solution_x[5, :], label='RAAN')
-
-#     axs[0].set_title('q1')
-#     axs[1].set_title('q2')
-#     axs[2].set_title('Right Ascension of Ascending Node')
-
-#     plt.tight_layout()
-#     plt.show()
-
-#     # Plot yaw angles
-#     fig, axs = plt.subplots(3, 1)
-#     axs[0].plot(time_grid, solution_x[12, :], label='Chief yaw angle')
-#     axs[0].set_title('Chief yaw angle')
-
-#     axs[1].plot(time_grid, solution_x[13, :], label='Deputy 1 yaw angle')
-#     axs[1].set_title('Deputy 1 yaw angle')
-
-#     axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
-#     axs[2].set_title('Constraints angle')
-
-#     plt.tight_layout()
+    # Ensure solution_x and solution_u are defined
+    if solution_x is not None and solution_u is not None:
+        # Plotting the results
+        time_grid = np.linspace(0, T, N + 1)
 
 
+        # Plot semi-major axis of the chief
+        plt.figure()
+        plt.plot(time_grid, solution_x[6, :], label='Chief semi-major axis')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Semi-major axis')
+        plt.title('Semi-major axis over time')
+        plt.legend()
+
+        # Plot yaw angles
+        plt.figure()
+        plt.plot(time_grid, solution_x[12, :], label='Chief yaw angle')
+        plt.plot(time_grid, solution_x[13, :], label='Deputy yaw angle')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Yaw angle')
+        plt.title('Yaw angles over time')
+        plt.legend()
+
+        rr_s = np.zeros((3, len(solution_x[12, :])))
+        angle_con_array = numpy.zeros(len(solution_x[12,:]))
+        # For each time step, compute the position
+        for i in range(len(solution_x[12, :])):
+            yy1 = solution_x[0:6, i]  # Deputy NSROE
+            yy2 = solution_x[6:12, i]  # Chief NSROE
+            rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
+            angle_con_array[i] = con_chief_deputy_angle(solution_x[:,i], param)
+
+        # Plot the LVLH frame trajectory in 3D
+        fig = plt.figure(figsize=(12, 6))
+        ax1 = fig.add_subplot(121, projection='3d')
+        ax1.plot3D(rr_s[0, :], rr_s[1, :], rr_s[2, :], 'black', linewidth=2, alpha=1, label='Deputy 1')
+        ax1.set_xlabel('x (km)')
+        ax1.set_ylabel('y (km)')
+        ax1.set_zlabel('z (km)')
+        ax1.set_title('LVLH frame - Deputy Spacecraft (Interactive)')
+        ax1.legend(loc='best')
+
+        # Plot the constraints angle over time
+        fig, axs = plt.subplots(3, 1)
+        axs[0].plot(time_grid, solution_x[0, :])
+        axs[0].set_title('x')
+
+        axs[1].plot(time_grid, solution_x[1, :])
+        axs[1].set_title('y')
+
+        axs[2].plot(time_grid, solution_x[2, :])
+        axs[2].set_title('z')
+
+        # Plot semi-major axis, mean true latitude, inclination
+        fig, axs = plt.subplots(3, 1)
+        axs[0].plot(time_grid, solution_x[0, :], label='semi-major axis')
+        axs[1].plot(time_grid, solution_x[1, :], label='mean true latitude')
+        axs[2].plot(time_grid, solution_x[2, :], label='inclination')
+
+        axs[0].set_title('Semi-major axis')
+        axs[1].set_title('Mean true latitude')
+        axs[2].set_title('Inclination')
+
+        plt.tight_layout()
+        plt.show()
+
+        # Plot q1, q2, right ascension of ascending node over time
+        fig, axs = plt.subplots(3, 1)
+        axs[0].plot(time_grid, solution_x[3, :], label='q1')
+        axs[1].plot(time_grid, solution_x[4, :], label='q2')
+        axs[2].plot(time_grid, solution_x[5, :], label='RAAN')
+
+        axs[0].set_title('q1')
+        axs[1].set_title('q2')
+        axs[2].set_title('Right Ascension of Ascending Node')
+
+        plt.tight_layout()
+        plt.show()
+
+        # Plot yaw angles
+        fig, axs = plt.subplots(3, 1)
+        axs[0].plot(time_grid, solution_x[12, :], label='Chief yaw angle')
+        axs[0].set_title('Chief yaw angle')
+
+        axs[1].plot(time_grid, solution_x[13, :], label='Deputy 1 yaw angle')
+        axs[1].set_title('Deputy 1 yaw angle')
+
+        axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
+        axs[2].set_title('Constraints angle')
+
+        plt.tight_layout()
 
 
 
-#     plt.figure()
-#     plt.plot(time_grid[:-1], solution_u[0, :], label='Chief torque')
-#     plt.plot(time_grid[:-1], solution_u[1, :], label='Deputy 1 torque')
-#     plt.xlabel('Time (s)')
-#     plt.ylabel('Torque Nm')
-#     plt.legend()
-#     plt.title('Control inputs over time')
-#     plt.tight_layout()
 
-#     plt.show()
 
-#     print("Plots generated.")
+        plt.figure()
+        plt.plot(time_grid[:-1], solution_u[0, :], label='Chief torque')
+        plt.plot(time_grid[:-1], solution_u[1, :], label='Deputy 1 torque')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Torque Nm')
+        plt.legend()
+        plt.title('Control inputs over time')
+        plt.tight_layout()
 
-# else:
-#     print("No solution to plot.")
+        plt.show()
+
+        print("Plots generated.")
+
+    else:
+        print("No solution to plot.")
