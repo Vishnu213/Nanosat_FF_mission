@@ -320,13 +320,15 @@ chief_initial_orbital_elements_target = np.array([
 
 # Additional Parameters
 yaw_target = np.array([
-    0.0, 1.57079633, 0.0, 0.0
+    1.57079633,0.0 , 0.0, 0.0
 ])
 
-state_target = np.concatenate((relative_orbital_elements_target,chief_initial_orbital_elements_target,yaw_target), axis=0)
+state_target_np = np.concatenate((relative_orbital_elements_target,chief_initial_orbital_elements_target,yaw_target), axis=0)
 
 
-print("State target ",state_target, state_target.shape)
+print("State target ",state_target_np, state_target_np.shape)
+
+state_target = ca.DM(state_target_np)  # Convert NumPy array to CasADi DM
 
 
 
@@ -369,10 +371,10 @@ yy_o=numpy.concatenate((RNOE_0,NOE_chief,yaw_c_d))
 
 # Test for Gauss equation
 mu = param["Primary"][0]
-N_points = 30
+N_points = 10
 Torb = 2 * numpy.pi * numpy.sqrt(NOE_chief[0]**3 / mu)  # [s] Orbital period
 n_revol_T = 0.05 * 365 * 24 * 60 * 60 / Torb
-n_revolution =10 # n_revol_T
+n_revolution =1/10 # n_revol_T
 T_total = n_revolution * Torb
 
 t_span = [0, T_total]
@@ -392,7 +394,10 @@ yy_ref = numpy.zeros((16, len(teval)))
 uu_ref = numpy.zeros((2, len(teval)))
 for i in range(len(teval)):
     yy_ref[:, i] = state_vector_function(teval[i])
+    print("yy_ref", yy_ref[:,i])
+
     uu_ref[:, i] = control_vector_function(teval[i])
+
 
 print("yy_ref>size",yy_ref.shape, yy_ref[:,-1].shape)
 l_colm = yy_ref[:,-1].reshape(-1,1)
@@ -406,9 +411,20 @@ print("control vector reference shapre.",uu_ref.shape)
 
 ## state vector
 print("T_inv",T_inv_value)
-print("state_target",state_target)
+# print("state_target",state_target)
 
-x_d = NSROE2LVLH(state_target[:6], state_target[6:12], param)
+# x_d = NSROE2LVLH(state_target[:6], state_target[6:12], param)
+
+a = numpy.matmul(T_value,state_target_np)
+b = numpy.matmul(T_inv_value, a)
+print(T_value)
+print("state_target",state_target_np)
+print("b",b)
+print(np.allclose(state_target_np, b, atol=1e-10))
+print("a",a)
+
+
+
 
 
 
@@ -616,16 +632,18 @@ for k in range(N):
 
 
     # # Yaw rate limits (vectorized)
-    # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) >= param["PHI_DOT"][0])  # Lower bound
-    # opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) <= param["PHI_DOT"][1])  # Upper bound
+    opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) >= param["PHI_DOT"][0])  # Lower bound
+    opti.subject_to(ca.mtimes(T_inv[14:16,14:16],dx_dt[14:16]) <= param["PHI_DOT"][1])  # Upper bound
 
     # # # Yaw angle limits (vectorized)
     # # opti.subject_to(xk[12:14] >= param["PHI"][0])  # Lower bound
     # # opti.subject_to(xk[12:14] <= param["PHI"][1])  # Upper bound
 
     # # Control input constraints (vectorized)
-    # opti.subject_to(ca.mtimes(S_inv[0,0],uk) >= param["T_MAX"][0])  # Lower bound
-    # opti.subject_to(ca.mtimes(S_inv[1,1],uk) <= param["T_MAX"][1])  # Upper bound
+    opti.subject_to(ca.mtimes(S_inv[0,0],uk) >= param["T_MAX"][0])  # Lower bound
+    opti.subject_to(ca.mtimes(S_inv[1,1],uk) <= param["T_MAX"][1])  # Upper bound
+
+    
 
     # opti.subject_to(t[0] == 0)  # Initial time condition
     # opti.subject_to(t[-1] == T_total)  # Final time condition
@@ -645,6 +663,7 @@ print("multiple",np.dot(T,np.concatenate((yy_ref,l_colm),axis =1)).shape)
 # yy_init = np.dot(T,np.concatenate((yy_ref,l_colm)))
 # Set initial guesses for the optimization problem
 opti.set_initial(X,np.concatenate((yy_ref,l_colm),axis =1))
+print("X",yy_ref)
 opti.set_initial(U, uu_ref)
 
 # Define the weights
@@ -659,7 +678,7 @@ objective1 = -X[6, -1]  # Original objective
 
 # objective3 = (x_f[0]**2 + x_f[1]**2 + x_f[2]**2 - x_d[0]**2 - x_d[1]**2 - x_d[2]**2)
 
-objective3 = ca.sum1(X[:6,-1] - np.matmul(T,state_target)[:6])**2 
+objective3 = ca.sumsqr(X[:,-1] - ca.mtimes(T,state_target))
 
 # Combine the objective functions with weights
 combined_objective = weight1 * objective3 #+ weight2 * objective1 #weight2 * objective2 #+   epsilon * control_cost , weight1 * objective1 # + 
@@ -683,7 +702,7 @@ opti.solver('ipopt', {
     'expand': True,
     # 'ipopt.print_level': 4,  # Detailed print level
     # 'ipopt.max_iter': N_points,  # Max iterations
-    'ipopt.tol': 1e-7,  # Convergence tolerance
+    'ipopt.tol': 1e-10,  # Convergence tolerance
     # 'print_time': True,  # Print computation time
     # # 'ipopt.sb': 'yes',  # Show solver's internal message
     # 'ipopt.jacobian_approximation': 'finite-difference-values',  # Use finite differences for Jacobian
@@ -716,9 +735,17 @@ if opti.stats()['success']:
     # # Extract solution
     solution_x = sol.value(X)
     solution_u = sol.value(U)
-    
+
+    print("solution x state",solution_x)
+    print("solution u control",solution_u)
+
+    print("solution x state",solution_x.shape)
+    print("last vector",solution_x[:,-1])
+    print("statevector",numpy.matmul(T_value,state_target_np))
+
     np.save("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy",solution_x)
     np.save("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy",solution_u )
+    np.save("solution_t_casadi_opt_100_noconstrains_12_10_2024.npy",t_value)
 else:
     # Record the end time
     end_time = time.time()

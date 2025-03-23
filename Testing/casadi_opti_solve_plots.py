@@ -304,6 +304,11 @@ param['S']  = S
 param['T_inv']  = T_inv
 param['S_inv']  = S_inv
 
+T_value = np.diag(scaling_state)
+T_inv_value = np.diag(scaling_state_inv)
+S_value = np.diag([23e5, 235])
+S_inv_value = np.diag([1/23e5, 1/23e5])
+
 
 # statement matrix [RNOE_0,NOE_chief,yaw_c_d]
 # [6x1,6x1,4x1]
@@ -684,8 +689,44 @@ def rk4_step(f, t, x, u, dt, param):
 
 if __name__ == "__main__":
 
-    solution_x = np.load("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy")
-    solution_u = np.load("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy")
+    x_state = np.load("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy")
+    print("x_state",x_state.shape)
+
+    x = np.zeros((16, x_state.shape[1]))
+
+    # for i in range(x_state.shape[1]):
+    #     x[:, i] = np.matmul(T_inv_value, x_state[:, i])
+
+    x = T_inv_value @ x_state
+
+    print("x",x[:,-1])
+    
+
+
+    #x = np.matmul(T_inv_value, np.load("solution_x_casadi_opt_100_noconstrains_12_10_2024.npy"))
+    u =np.load("solution_u_casadi_opt_100_noconstrains_12_10_2024.npy") #  np.matmul(S_inv_value, 
+    time_points = np.load("solution_t_casadi_opt_100_noconstrains_12_10_2024.npy")
+
+    ## shape of the x and u
+
+    print("shape of x",x.shape)
+    print("shape of u",u.T.shape)
+    print("shape of time_points",time_points.shape)
+
+    # Create interpolation functions
+    state_interp = interp1d(time_points, x.T, kind='cubic', axis=0)  # Cubic interpolation
+    print(u.T, time_points)
+    print("first element ", u[:,0], numpy.array([0,0]).shape)
+    print("Shape", u.shape,)
+    u = np.concatenate((u, np.zeros((2, 1))), axis=1)  # Add an extra control input
+    print(u.shape, time_points.shape)
+    control_interp = interp1d(time_points, u.T, kind='cubic', axis=0)
+
+    time_grid = np.linspace(0, time_points[-1], num=100)  # 1000 points between t0 and tN
+    solution_x =  T_inv_value @ state_interp(time_grid).T
+    print("solution_x",solution_x.shape)
+    print("solution_x",solution_x)
+    solution_u = control_interp(time_grid)
 
     # # pplot control inputs
     # print(max(solution_u[1, :]))
@@ -694,39 +735,38 @@ if __name__ == "__main__":
     # Ensure solution_x and solution_u are defined
     if solution_x is not None and solution_u is not None:
         # Plotting the results
-        time_grid = np.linspace(0, T, N + 1)
+        # time_grid = np.linspace(0, T, N + 1)
 
-
+        print("Shapes", solution_x.shape, solution_u.shape)
         # Plot semi-major axis of the chief
         plt.figure()
-        plt.plot(time_grid, solution_x[6, :], label='Chief semi-major axis')
+        plt.plot(time_grid, solution_x[6,:], label='Chief semi-major axis')
         plt.xlabel('Time (s)')
         plt.ylabel('Semi-major axis')
         plt.title('Semi-major axis over time')
         plt.legend()
 
-        # Plot yaw angles
-        plt.figure()
-        plt.plot(time_grid, solution_x[12, :], label='Chief yaw angle')
-        plt.plot(time_grid, solution_x[13, :], label='Deputy yaw angle')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Yaw angle')
-        plt.title('Yaw angles over time')
-        plt.legend()
 
-        rr_s = np.zeros((3, len(solution_x[12, :])))
+
+        rr_s = np.zeros((3, len(solution_x[12,:])))
         angle_con_array = numpy.zeros(len(solution_x[12,:]))
         # For each time step, compute the position
-        for i in range(len(solution_x[12, :])):
-            yy1 = solution_x[0:6, i]  # Deputy NSROE
-            yy2 = solution_x[6:12, i]  # Chief NSROE
+        for i in range(len(solution_x[12,:])):
+            yy1 = solution_x[0:6,i]  # Deputy NSROE
+            yy2 = solution_x[6:12,i]  # Chief NSROE
+            print("yy1",yy1,range(len(solution_x[12,:])) )
+            rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
+            print("yy1",yy2,range(len(solution_x[:, 12])) )
             rr_s[:, i] = NSROE2LVLH(yy1, yy2, param)
             angle_con_array[i] = con_chief_deputy_angle(solution_x[:,i], param)
 
         # Plot the LVLH frame trajectory in 3D
         fig = plt.figure(figsize=(12, 6))
         ax1 = fig.add_subplot(121, projection='3d')
+        ax1.plot3D(rr_s[0, 0], rr_s[1, 0], rr_s[2, 0], 'green', marker='o', markersize=5, label='Initial')
         ax1.plot3D(rr_s[0, :], rr_s[1, :], rr_s[2, :], 'black', linewidth=2, alpha=1, label='Deputy 1')
+        ax1.plot3D(rr_s[0, -1], rr_s[1, -1], rr_s[2, -1], 'red', marker='o', markersize=5, label='Final')
+        ax1.plot3D(0, 0, 0, 'blue', marker='o', markersize=5, label='chief')
         ax1.set_xlabel('x (km)')
         ax1.set_ylabel('y (km)')
         ax1.set_zlabel('z (km)')
@@ -746,40 +786,40 @@ if __name__ == "__main__":
 
         # Plot semi-major axis, mean true latitude, inclination
         fig, axs = plt.subplots(3, 1)
-        axs[0].plot(time_grid, solution_x[0, :], label='semi-major axis')
-        axs[1].plot(time_grid, solution_x[1, :], label='mean true latitude')
-        axs[2].plot(time_grid, solution_x[2, :], label='inclination')
+        axs[0].plot(time_grid, solution_x[0,:], label='semi-major axis')
+        axs[1].plot(time_grid, solution_x[1,:], label='mean true latitude')
+        axs[2].plot(time_grid, solution_x[2,:], label='inclination')
 
         axs[0].set_title('Semi-major axis')
         axs[1].set_title('Mean true latitude')
         axs[2].set_title('Inclination')
 
         plt.tight_layout()
-        plt.show()
+
 
         # Plot q1, q2, right ascension of ascending node over time
         fig, axs = plt.subplots(3, 1)
-        axs[0].plot(time_grid, solution_x[3, :], label='q1')
-        axs[1].plot(time_grid, solution_x[4, :], label='q2')
-        axs[2].plot(time_grid, solution_x[5, :], label='RAAN')
+        axs[0].plot(time_grid, solution_x[3,:], label='q1')
+        axs[1].plot(time_grid, solution_x[4,:], label='q2')
+        axs[2].plot(time_grid, solution_x[5,:], label='RAAN')
 
         axs[0].set_title('q1')
         axs[1].set_title('q2')
         axs[2].set_title('Right Ascension of Ascending Node')
 
         plt.tight_layout()
-        plt.show()
+
 
         # Plot yaw angles
         fig, axs = plt.subplots(3, 1)
-        axs[0].plot(time_grid, solution_x[12, :], label='Chief yaw angle')
+        axs[0].plot(time_grid, solution_x[12,:], label='Chief yaw angle')
         axs[0].set_title('Chief yaw angle')
 
-        axs[1].plot(time_grid, solution_x[13, :], label='Deputy 1 yaw angle')
+        axs[1].plot(time_grid, solution_x[13,:], label='Deputy 1 yaw angle')
         axs[1].set_title('Deputy 1 yaw angle')
 
-        axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
-        axs[2].set_title('Constraints angle')
+        # axs[2].plot(time_grid, angle_con_array, label='Constraints angle')
+        # axs[2].set_title('Constraints angle')
 
         plt.tight_layout()
 
@@ -787,9 +827,11 @@ if __name__ == "__main__":
 
 
 
+        print("Shape controls", solution_u.shape)
+        print("time grid", time_grid.shape)
         plt.figure()
-        plt.plot(time_grid[:-1], solution_u[0, :], label='Chief torque')
-        plt.plot(time_grid[:-1], solution_u[1, :], label='Deputy 1 torque')
+        plt.plot(time_grid, solution_u[:,0], label='Chief torque')
+        plt.plot(time_grid, solution_u[:,1], label='Deputy 1 torque')
         plt.xlabel('Time (s)')
         plt.ylabel('Torque Nm')
         plt.legend()
