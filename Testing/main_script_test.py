@@ -44,7 +44,7 @@ from TwoBP import (
     NSROE2LVLH_2,
        )
 
-from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics, uu_log, uu_deputy
+from dynamics import Dynamics_N, yaw_dynamics_N, yaw_dynamics, absolute_NSROE_dynamics, Dynamics, uu_log, uu_deputy, time_global, yaw_dynamics_extract
 from constrains import con_chief_deputy_angle, con_chief_deputy_vec_numeric
 
 from integrators import integrate_system
@@ -52,7 +52,7 @@ from integrators import integrate_system
 
 class StateVectorInterpolator:
     def __init__(self, teval, solution_x):
-        self.interpolating_functions = [interp1d(teval, solution_x[i, :], kind='linear', fill_value="extrapolate") for i in range(solution_x.shape[0])]
+        self.interpolating_functions = [interp1d(teval, solution_x[i, :], kind='quadratic', fill_value="extrapolate") for i in range(solution_x.shape[0])]
 
     def __call__(self, t):
         return np.array([f(t) for f in self.interpolating_functions])
@@ -301,8 +301,8 @@ data['T_inv']  = T_inv
 # [6x1,6x1,4x1]
 yy_o_unscaled=numpy.concatenate((RNOE_0, NOE_chief, yaw_c_d))
 
-yy_o = numpy.dot(T,yy_o_unscaled)
-
+yy_o = numpy.matmul(T,yy_o_unscaled)
+# yy_o = yy_o_unscaled
 # test for gauess equation
 mu=data["Primary"][0]
 Torb = 2*numpy.pi*numpy.sqrt(NOE_chief[0]**3/mu)    # [s]    Orbital period
@@ -334,10 +334,9 @@ print("Integration starting....")
 start_time = time.time()
 
 sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-                        method='RK45',args=(data,uu), rtol=1e-13, atol=1e-11,dense_output=True)
+                        method='RK45',args=(data,uu), rtol=1e-7, atol=1e-7,dense_output=True)
 
-# sol=integrate.solve_ivp(Dynamics, t_span, yy_o,t_eval=teval,
-#                         method='RK45',args=(data,uu), max_step=0.01, atol = 1, rtol = 1,dense_output=True)
+
 
 # Check solver status
 if sol.status != 0:
@@ -355,7 +354,7 @@ execution_time = end_time - start_time
 
 # teval = t_values
 
-sol_y = np.dot(T_inv,sol.y) 
+sol_y = sol.y 
 
 teval = sol.t
 
@@ -368,14 +367,101 @@ print("sol_y",sol_y.shape)
 state_vector_function = StateVectorInterpolator(teval, sol_y)
 #control_vector_function = StateVectorInterpolator(teval, uu_log)
 
+yy_interpolated = numpy.zeros((16,len(teval)))  
+
+for i in range(len(teval)):
+    yy_interpolated[:,i] = state_vector_function(teval[i])
+    print("diff at 1",teval[i], "diff",yy_interpolated[0,i]-sol_y[0,i])
+    print("diff at 7",teval[i], "diff",yy_interpolated[1,i]-sol_y[1,i])
+    print("diff at 13",teval[i], "diff",yy_interpolated[7,i]-sol_y[7,i])
+
 print("Interpolating function created successfully.")
 
+sol_y = np.dot(T_inv,sol.y) 
 
+teval = sol.t
+
+## computing the control
+u_control = np.zeros((2,len(teval)))
+for i in range(len(teval)):
+    # Compute the control input
+    _,u_temp=yaw_dynamics_extract(teval[i], sol_y[:,i], data, uu)
+    
+    #print("u_temp",u_temp, "time",teval[i], "state",sol_y[:,i])
+    u_control[0,i] = u_temp[0]
+    u_control[1,i] = u_temp[1]
+
+    # Store the control input
+    # uu_log.append(uu)
+    # uu_deputy.append(uu_deputy)
+
+# u_control = numpy.array(uu_log)
+# t_u = numpy.array(time_global)
+t_u = teval
+print("u_control",u_control.shape)
+print("t_u",t_u.shape)
+
+control_vector_function = StateVectorInterpolator(t_u, u_control)
 # # Save the function using pickle
 with open('state_vector_function.pkl', 'wb') as f:
     pickle.dump(state_vector_function, f)
 
+# # Save the function using pickle
+with open('control_vector_function.pkl', 'wb') as f:
+    pickle.dump(control_vector_function, f)
+
 print("Interpolating function saved successfully.")
+
+uu_interpolated = control_vector_function(teval)
+
+
+
+
+# plot the interpolated control with the original data
+
+# Plot the control input
+fig, ax = plt.subplots(2, 1, figsize=(10, 6))
+ax[0].plot(teval, u_control[0, :], label='u1')
+ax[0].plot(teval, uu_interpolated[0, :], label='u1_interpolated')
+ax[0].set_xlabel('Time [s]')
+ax[0].set_ylabel('Control input u1')
+ax[0].set_title('Control input u1 vs. Time')
+ax[0].legend()
+
+ax[1].plot(teval, u_control[1, :], label='u2')
+ax[1].plot(teval, uu_interpolated[1, :], label='u2_interpolated')
+ax[1].set_xlabel('Time [s]')
+ax[1].set_ylabel('Control input u2')
+ax[1].set_title('Control input u2 vs. Time')
+ax[1].legend()
+
+plt.tight_layout()
+plt.show()
+
+
+print("shape of the interpolated data",yy_interpolated.shape)
+fig1, ax1 = plt.subplots(2, 1, figsize=(10, 6))
+ax1[0].plot(teval, sol_y[6, :], label='delta_a')
+ax1[0].plot(teval, yy_interpolated[6, :], label='delta_a_interpolated')
+ax1[0].set_xlabel('Time [s]')
+ax1[0].set_ylabel('delta_a')
+ax1[0].set_title('delta_a vs. Time')
+ax1[0].legend()
+
+ax1[1].plot(teval, sol_y[7, :], label='delta_lambda0')
+ax1[1].plot(teval, yy_interpolated[7, :], label='delta_lambda0_interpolated')
+ax1[1].set_xlabel('Time [s]')
+ax1[1].set_ylabel('delta_lambda0')
+ax1[1].set_title('delta_lambda0 vs. Time')
+ax1[1].legend()
+
+
+plt.tight_layout()
+plt.show()
+
+
+
+
 
 # Print the execution time
 print(f"Time taken for integration: {execution_time:.4f} seconds")
@@ -697,13 +783,13 @@ axs[1].set_title('Deputy 1 yaw rate')
 
 
 
-# After integration
-uu_log1 = np.array(uu_log)  # Convert to numpy array
-uu_log2 =np.array(uu_deputy)  # Convert to numpy array
+# # After integration
+# uu_log1 = np.array(uu_log)  # Convert to numpy array
+# uu_log2 =np.array(uu_deputy)  # Convert to numpy array
 
-u_chief = uu_log1[:, 0]  # Chief input torque
-u_deputy = uu_log1[:, 1]  # Deputy input torque
-u_deputy1 = uu_log1[:, 2]  # Deputy
+# u_chief = uu_log1[:, 0]  # Chief input torque
+# u_deputy = uu_log1[:, 1]  # Deputy input torque
+# u_deputy1 = uu_log1[:, 2]  # Deputy
 
 
 # control_vector_function = StateVectorInterpolator(teval, uu_log1[:,0:2])
@@ -716,12 +802,22 @@ u_deputy1 = uu_log1[:, 2]  # Deputy
 #     pickle.dump(control_vector_function, f)
 
 # Check the shape of uu_log (it should be Nx2, where N is the number of time steps)
-print(f"uu_log shape: {uu_log1.shape}")
+# print(f"uu_log shape: {uu_log1.shape}")
+
+fig, axs = plt.subplots(2, 1)
+
+# Plot data on the first subplot
+axs[0].plot(teval, u_control[0, :])
+axs[0].set_title('Chief control')
+
+# Plot data on the second subplot
+axs[1].plot(teval, u_control[1, :])
+axs[1].set_title('Deputy 1 control')
 
 # # Plotting the results for both components of uu
 # plt.figure()
-# plt.plot(uu_log1[:, 0], label='uu component 1')  # First column
-# plt.plot(uu_log1[:, 1], label='uu component 2')  # Second column
+# plt.plot(t_u,u_control[0, :], label='uu component 1')  # First column
+# plt.plot(t_u,u_control[1, :], label='uu component 2')  # Second column
 # plt.xlabel('Time (s)')
 # plt.ylabel('Input torque (uu)')
 # plt.title('Evolution of uu over time')

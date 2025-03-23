@@ -20,6 +20,7 @@ from lift_drag import compute_forces_for_entities, loaded_polynomials
 uu_ind = []
 uu_deputy = []
 uu_log =[]
+time_global = []
 
 
 def yaw_dynamics_N(t, yy, param):
@@ -142,6 +143,109 @@ def yaw_dynamics(t, yy, param, uu):
     Izc = param["sat"][0]  # Chief satellite's moment of inertia
     Izd = param["sat"][1]  # Deputy satellite's moment of inertia
 
+
+    global uu_ind, uu_log, uu_deputy, time_global
+    # Initialize state derivatives and control input
+    y_dynamics = np.zeros(4)
+
+    # Normalize yaw angles (chief and deputy) to stay within 0 and 2*pi
+    if yy[12] > 2*np.pi:
+        yy[12] = 2*np.pi - yy[12]
+    elif yy[12] < -2*np.pi:
+        yy[12] = 2 * np.pi + yy[12]
+
+    if yy[13] > 2*np.pi:
+        yy[13] = 2*np.pi - yy[13]
+    elif yy[13] < -2*np.pi:
+        yy[13] = 2 * np.pi + yy[13]
+    
+
+
+    # Extract angular velocities (yaw rates) from yy (assuming yy[14] and yy[15] are angular velocities)
+    y_dot_c = yy[14]  # Chief satellite angular velocity
+    y_dot_d = yy[15]  # Deputy satellite angular velocity
+
+    T = param["T_period"]
+    
+    # Control gains
+    Kp = 7e-7
+    Kd = 2e-4
+    
+    # Control limits (min and max torque values)
+    control_min = -23e-6
+    control_max = 23e-6
+
+    # Custom wave applied to control yaw angle (90 degrees to 0 degrees with smooth transitions)
+    wave_output = half_half_curve(t, T, 0, 45*np.pi / 180, transition_fraction=0.1, total_orbits=1)
+    wave_output_1 = half_half_curve(t, T, 90*np.pi / 180,30*np.pi / 180, transition_fraction=0.1, total_orbits=1)
+    
+    # PID control law for the chief satellite
+    e_current = wave_output - yy[12]  # Current error for chief
+    derivative = -y_dot_c
+    control_input =  Kp * e_current + Kd * derivative
+
+    # Clip the control input for chief to the specified range
+    control_input_clipped = np.clip(control_input, control_min, control_max)
+
+    T = param["T"]
+    S = param["S"]
+
+    # Chief satellite yaw dynamics
+    # y_dynamics[0] = T[12,12] *y_dot_c  # Derivative of yaw angle (yaw rate) for chief
+    # y_dynamics[2] = T[14,14] * (1/S[0,0])*(1/Izc) * control_input     # Derivative of yaw rate (angular acceleration) for chief
+
+
+    y_dynamics[0] = y_dot_c  # Derivative of yaw angle (yaw rate) for chief
+    y_dynamics[2] = (1/Izc) * control_input     # Derivative of yaw rate (angular acceleration) for chief
+
+
+
+    # PID control law for the deputy satellite
+    e_current_1 = wave_output_1 - yy[13]  # Current error for deputy
+    derivative_1 = -y_dot_d
+    control_input_1 = Kp * e_current_1 + Kd * derivative_1
+
+    # Clip the control input for deputy to the specified range
+    control_input_1_clipped = np.clip(control_input_1, control_min, control_max)
+
+
+
+    # Deputy satellite yaw dynamics
+    # y_dynamics[1] = T[13,13]* y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
+    # y_dynamics[3] = T[15,15] * (1/S[1,1])(1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
+
+    y_dynamics[1] = y_dot_d  # Derivative of yaw angle (yaw rate) for deputy
+    y_dynamics[3] = (1/Izd) * control_input_1  # Derivative of yaw rate (angular acceleration) for deputy
+
+
+
+    if y_dynamics[0] <0 or y_dynamics[1] <0:
+        #print("YAW NEGATIVE")
+        pass
+
+    uu_ind = [control_input, control_input_1]
+    uu_log.append(uu_ind)
+    uu_ind = []
+
+    time_global.append(t)
+
+
+    # Uncomment to print control inputs and time for debugging
+    # print("u_c:", control_input_clipped)
+    # print("u_d:", control_input_1_clipped)
+    # print("time:", t)
+
+    return y_dynamics
+
+
+
+def yaw_dynamics_extract(t, yy, param, uu):
+    # Extracting parameters for inertia
+    Izc = param["sat"][0]  # Chief satellite's moment of inertia
+    Izd = param["sat"][1]  # Deputy satellite's moment of inertia
+
+
+    global uu_ind, uu_log, uu_deputy, time_global
     # Initialize state derivatives and control input
     y_dynamics = np.zeros(4)
 
@@ -220,9 +324,11 @@ def yaw_dynamics(t, yy, param, uu):
         #print("YAW NEGATIVE")
         pass
 
-    # uu_ind = [control_input, control_input_1, control_input_clipped]
-    # uu_log.append(uu_ind)
-    # uu_ind = []
+    uu_ind = [control_input, control_input_1]
+    uu_log.append(uu_ind)
+    uu_ind = []
+
+    time_global.append(t)
 
 
     # Uncomment to print control inputs and time for debugging
@@ -230,7 +336,9 @@ def yaw_dynamics(t, yy, param, uu):
     # print("u_d:", control_input_1_clipped)
     # print("time:", t)
 
-    return y_dynamics
+    return y_dynamics, [control_input, control_input_1]
+
+
 
 
 
@@ -343,7 +451,7 @@ def absolute_NSROE_dynamics(t, yy, param,yy_o):
     # print("rr_1 cheiffff",rr_1)
     # print("vv_1 chieffff",vv_1)   
     u_chief=compute_forces_for_entities(data, loaded_polynomials,yy_o[12:13], vv_1, rr_1)
-    uu_ind.append(u_chief)
+    # uu_ind.append(u_chief)
     # print("u_ind",uu_ind)
     # print("u_chief-----",u_chief)
      
@@ -390,8 +498,8 @@ def Dynamics(t, yy_in, param,uu):
 
     global uu_ind, uu_log, uu_deputy
     
-    print("time",t, "yy_scaled",yy_in)
-    print("time",t, "yy_unscaled",yy_in)
+    # print("time",t, "yy_scaled",yy_in)
+    # print("time",t, "yy_unscaled",yy_in)
     
     T = param["T"]
     S = param["S"]
@@ -399,6 +507,7 @@ def Dynamics(t, yy_in, param,uu):
     S_inv = np.diag([1/S[0,0],1/S[1,1]])
 
     yy = np.matmul(T_inv, yy_in)
+    # yy = yy_in
 
     start_idx = 0
     chief_state = yy[6:12]
@@ -429,14 +538,14 @@ def Dynamics(t, yy_in, param,uu):
     u_deputy = compute_forces_for_entities(data_deputy, loaded_polynomials, [yy[13]],vv_1, rr_1)
     # print("u_deputy",u_deputy)
     # print("u_c",uu_ind)
-    uu_ind.append(u_deputy)
+    # uu_ind.append(u_deputy)
     # u_deputy = numpy.zeros((3))
     # calculate the differential aerodynamic forces
     u =  u_deputy - u_c
 
-    uu_ind.append(u)
-    uu_log.append(uu_ind)
-    uu_ind = []
+    # uu_ind.append(u)
+    # uu_log.append(uu_ind)
+    # uu_ind = []
     # uu_deputy.append(u)
     # print("u _differential",u)
     #print("u_c",u_c)
@@ -460,8 +569,10 @@ def Dynamics(t, yy_in, param,uu):
 
     y = numpy.concatenate((y_dot_deputy, y_dot_chief, y_dot_yaw))
 
+    y_out = numpy.matmul(T, y)
 
-    return y
+
+    return y_out
 
 
 def absolute_NSROE_dynamics_density(t, yy, param):

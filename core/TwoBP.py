@@ -1444,7 +1444,7 @@ def NSROE2LVLH(NSROE,NSOE0,data):
     
     z_p = (e3 / p) * numpy.sin(u + beta_0)
 
-    return r*numpy.array([x_p, y_p, z_p])
+    return r*numpy.array([x_p, y_p, z_p]) # r
 
 def calculate_orbital_parameters(NSOE, mu):
     """
